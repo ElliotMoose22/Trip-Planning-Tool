@@ -109,8 +109,9 @@ def extract_places(rows: list[ReelRow]) -> int:
         return 0
     prompt = PROMPT + "\n".join(f"{i}. {r.caption[:600]}" for i, r in enumerate(todo))
     try:
+        env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"].strip()}
         out = subprocess.run(["claude", "-p", prompt, "--output-format", "json"], capture_output=True,
-                             text=True, timeout=300).stdout
+                             text=True, timeout=300, env=env).stdout
         text = json.loads(out).get("result", "")
         answer = json.loads(re.search(r"\[.*\]", text, re.S).group())
     except Exception as e:  # never sink the weekly run over this
