@@ -280,9 +280,7 @@ def plan_json(plan: Plan, legs: list[LegResult], sigs: dict, stays: list[StayRes
                     "km": round(g.km), "hours": round(g.hours, 1)} for g in plan.ground],
         "alternatives": _alternatives(legs),
         "checks": [{"level": c.level, "text": c.text} for c in plan.checks],
-        "reels": [{"place": r.place, "country": r.country, "lat": r.lat, "lon": r.lon, "rating": r.rating,
-                   "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data}
-                  for r in ((getattr(plan, "reels", None) or ([], {}))[0]) if r.lat is not None],
+        "reels": reels_json(plan),
         "daytrip_km": __import__("triptool.reels", fromlist=["daytrip_km"]).daytrip_km(2.5),
         "recommendations": [{"kind": r.kind, "title": r.title, "detail": r.detail, "places": r.places, "legs": r.legs}
                             for r in getattr(plan, "recs", [])],
@@ -338,3 +336,25 @@ def build_stays(plan: Plan, s: Settings, results: dict, store: Store, source: st
         sig = evaluate(series, (st.check_in - today).days, "stay", budget=budget)
         out.append(StayResult(st, q, sig, series, budget))
     return out
+
+
+def reels_json(plan) -> list[dict]:
+    return [{"place": r.place, "country": r.country, "lat": r.lat, "lon": r.lon, "rating": r.rating,
+             "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data}
+            for r in ((getattr(plan, "reels", None) or ([], {}))[0]) if r.lat is not None]
+
+
+def update_plan_reels(plan, path: str = "reports/plan.json") -> int:
+    """Refresh just the reels in the map data, between weekly runs."""
+    import json
+    from .reels import daytrip_km
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return 0
+    data["reels"] = reels_json(plan)
+    data["daytrip_km"] = daytrip_km(2.5)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=1, default=str)
+    return len(data["reels"])

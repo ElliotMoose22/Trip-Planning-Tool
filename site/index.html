@@ -38,6 +38,13 @@
   .legend { position:absolute; left:12px; bottom:12px; right:12px; display:flex; flex-wrap:wrap; gap: 6px 14px; font-size:12px; color:#a9b5ca; pointer-events:none; }
   .legend i { display:inline-block; width:18px; border-top:2px solid; vertical-align: middle; margin-right:6px; }
   .lf i { border-color: var(--flight); } .lb i { border-color: var(--booked); } .la i { border-top-style:dashed; border-color: var(--alt); } .lg i { border-top-style:dotted; border-color: var(--ground); }
+  .legend .lr i { width:9px; height:9px; border:0; border-radius:2px; transform: rotate(45deg); vertical-align: 0; margin-right:7px; }
+  .lr.g i { background:#5fd39a; } .lr.y i { background:#f5c542; } .lr.r i { background:#ef5b56; }
+  .legend .lring i { width:12px; height:12px; border:1px dashed rgba(95,211,154,.8); border-radius:50%; background: rgba(95,211,154,.08); vertical-align: -2px; }
+  .reel-photo, .reel-nophoto { width:100%; aspect-ratio: 16 / 10; border-radius: 8px; margin: 8px 0 4px; display:block; }
+  .reel-photo { object-fit: cover; background: var(--line); }
+  .reel-nophoto { display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,.04); color: var(--muted); font-size: 12px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:2px; transform: rotate(45deg); margin-right:6px; }
   .tip { position:absolute; pointer-events:none; background: rgba(12,18,30,.94); border:1px solid #2b3a57; border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space:nowrap; transform: translate(-50%, calc(-100% - 12px)); }
   .tip em { font-style:normal; color: var(--muted); display:block; }
   .side { display:grid; gap: 14px; }
@@ -97,6 +104,8 @@
       <div class="legend">
         <span class="lf"><i></i>Flight to book</span><span class="lb"><i></i>Booked</span>
         <span class="lg"><i></i>Bus / train</span><span class="la"><i></i>Could fly instead</span>
+        <span class="lr g"><i></i>Reel: day trip</span><span class="lr y"><i></i>Reel: needs a night</span>
+        <span class="lr r"><i></i>Reel: off the route</span><span class="lring"><i></i>Day-trip range</span>
       </div>
     </div>
 
@@ -160,6 +169,11 @@
     if (!pins.some((p) => p.name === n)) pins.push({ name: n, lat: ll[0], lon: ll[1], nights: 0, home: n === rows.find((x) => x.kind === 'flight')?.from });
   }));
 
+  // ---- reels we've sent the trip account ----
+  const REEL_COL = { Green: '#5fd39a', Yellow: '#f5c542', Red: '#ef5b56' };
+  const reels = (plan.reels || []).filter((r) => r.lat != null && r.lon != null).map((r, i) => ({ ...r, id: `r${i}` }));
+  const DAYTRIP_KM = plan.daytrip_km || 115;
+
   // ---- header ----
   const flights = rows.filter((r) => r.kind === 'flight'), ground = rows.filter((r) => r.kind === 'ground');
   const set = (id, v) => { document.getElementById(id).textContent = v; };
@@ -179,8 +193,9 @@
       return li; })); }
 
   // ---- selection ----
-  let selected = null;
-  const select = (id) => { selected = id; drawLegs(); drawDetail(); const L = rows.find((r) => r.id === id);
+  let selected = null, reel = null;
+  const pickReel = (r) => { reel = r; selected = null; drawLegs(); drawDetail(); G.flyTo(r.lon, r.lat, Math.max(G.k, 3)); };
+  const select = (id) => { selected = id; reel = null; drawLegs(); drawDetail(); const L = rows.find((r) => r.id === id);
     if (L) { const m = d3.geoInterpolate([L.a[1], L.a[0]], [L.b[1], L.b[0]])(0.5); G.flyTo(m[0], m[1], Math.max(G.k, L.km > 4000 ? 1.4 : 2.6)); } };
 
   function drawLegs() {
@@ -196,6 +211,21 @@
   }
   function drawDetail() {
     const el = document.getElementById('detail'); el.replaceChildren();
+    if (reel) {
+      const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
+      add('div', 'kicker', `Reel · sent by ${reel.sender || 'one of us'}`);
+      add('div', 'route', reel.place);
+      if (reel.photo && reel.photo.startsWith('data:image/')) { const img = add('img', 'reel-photo'); img.src = reel.photo; img.alt = reel.place; }
+      else add('div', 'reel-nophoto', 'Photo arrives with the next check');
+      const line = add('p'); line.style.margin = '6px 0 0';
+      const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = REEL_COL[reel.colour] || REEL_COL.Red;
+      line.append(dot, document.createTextNode(reel.fits || ''));
+      const dl = add('dl');
+      const row = (k, v) => { if (v == null || v === '') return; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
+      row('Rating', reel.rating ? `${reel.rating} / 10` : 'not rated yet'); row('Sent by', reel.sender); row('Country', reel.country);
+      if (reel.link) { const a = add('a', null, 'Open the reel ↗'); a.href = reel.link; a.target = '_blank'; a.rel = 'noopener'; a.style.display = 'inline-block'; a.style.marginTop = '10px'; a.style.color = 'inherit'; }
+      return;
+    }
     const pick = rows.find((r) => r.id === selected) || flights.find((r) => !r.booked) || rows[0];
     if (!pick) return;
     const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
@@ -273,6 +303,11 @@
     for (const f of onRoute) { ctx.beginPath(); path(f); ctx.fillStyle = '#223047'; ctx.fill(); ctx.strokeStyle = 'rgba(190,210,240,.35)'; ctx.stroke(); }
     ctx.strokeStyle = 'rgba(140,180,255,.25)'; ctx.lineWidth = 1; ctx.beginPath(); path({ type: 'Sphere' }); ctx.stroke();
 
+    // day-trip range around each place we sleep
+    ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(95,211,154,.45)'; ctx.fillStyle = 'rgba(95,211,154,.06)';
+    for (const p of pins.filter((p) => p.nights)) { ctx.beginPath(); path(d3.geoCircle().center([p.lon, p.lat]).radius(DAYTRIP_KM / 111.2).precision(4)()); ctx.fill(); ctx.stroke(); }
+    ctx.setLineDash([]);
+
     const order = lines.slice().sort((a, b) => (a.row.id === selected) - (b.row.id === selected) || (a.row.id === G.hover) - (b.row.id === G.hover));
     for (const L of order) {
       const r = L.row, on = r.id === selected, hov = r.id === G.hover;
@@ -304,6 +339,22 @@
       const [lx, ly] = spots.find(([a, b]) => !hits(a, b)) || spots[0]; placed.push([lx, ly, tw]);
       ctx.fillStyle = 'rgba(7,12,22,.75)'; ctx.fillRect(lx - 3, ly - 8, tw + 6, 16); ctx.fillStyle = '#e8eef8'; ctx.fillText(p.name, lx, ly);
     }
+    // reel pins: small diamonds coloured by how they fit
+    for (const R of reels) {
+      const s = toScreen(R.lon, R.lat, 0); if (s[2] <= 0.05) continue;
+      const [x, y] = s, on = reel && reel.id === R.id, r = on ? 7 : 5;
+      if (on) { ctx.beginPath(); ctx.arc(x, y, r + 5, 0, 2 * Math.PI); ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillStyle = REEL_COL[R.colour] || REEL_COL.Red; ctx.strokeStyle = '#0a1120'; ctx.lineWidth = 1.5;
+      ctx.fillRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.strokeRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.restore();
+      if (G.k > 2.2 || on) {
+        ctx.font = '500 10px ' + getComputedStyle(document.body).fontFamily;
+        const tw = ctx.measureText(R.place).width;
+        const free = (lx, ly) => !placed.some((q) => Math.abs(q[1] - ly) < 13 && lx < q[0] + q[2] + 4 && lx + tw > q[0] - 4);
+        const spot = [[x + 9, y + 1], [x - 9 - tw, y + 1], [x + 9, y + 13], [x - 9 - tw, y + 13], [x + 9, y - 11]].find(([a, b]) => free(a, b));
+        if (spot || on) { const [lx, ly] = spot || [x + 9, y + 1]; placed.push([lx, ly, tw]);
+          ctx.fillStyle = 'rgba(7,12,22,.6)'; ctx.fillRect(lx - 2, ly - 6, tw + 4, 12); ctx.fillStyle = 'rgba(232,238,248,.9)'; ctx.fillText(R.place, lx, ly); }
+      }
+    }
   }
 
   const zoom = d3.zoom().scaleExtent([0.8, 9]).filter((e) => !e.button)
@@ -329,6 +380,8 @@
 
   const pickAt = (mx, my) => {
     let best = null, bd = 12;
+    for (const R of reels) { const s = toScreen(R.lon, R.lat, 0); if (s[2] <= 0) continue; const d = Math.hypot(s[0] - mx, s[1] - my); if (d < bd) { bd = d; best = { reel: R }; } }
+    if (best) return best;
     for (const p of pins) { const s = toScreen(p.lon, p.lat, 0); if (s[2] <= 0) continue; const d = Math.hypot(s[0] - mx, s[1] - 14 - my); if (d < bd) { bd = d; best = { pin: p }; } }
     if (best) return best;
     for (const L of lines) for (let i = 1; i < L.scr.length; i++) { const a = L.scr[i - 1], b = L.scr[i]; if (!a.vis || !b.vis) continue;
@@ -342,14 +395,16 @@
     if (!hit || e.pointerType === 'touch') { tip.hidden = true; return; }
     tip.hidden = false; tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top) + 'px';
     const em = document.createElement('em');
-    if (hit.leg) { const L = hit.leg; tip.replaceChildren(`${L.from} → ${L.to}`); em.textContent = `${L.when} · ${L.kind === 'flight' ? (L.cost == null ? 'no price yet' : money(L.cost)) : L.how}`; }
+    if (hit.reel) { const R = hit.reel; tip.replaceChildren(R.place); em.textContent = `${R.rating ? R.rating + '/10' : 'unrated'} · ${R.sender || ''}`; }
+    else if (hit.leg) { const L = hit.leg; tip.replaceChildren(`${L.from} → ${L.to}`); em.textContent = `${L.when} · ${L.kind === 'flight' ? (L.cost == null ? 'no price yet' : money(L.cost)) : L.how}`; }
     else { const P = hit.pin; tip.replaceChildren(P.name); em.textContent = P.home ? 'Start' : P.nights ? `${P.nights} night${P.nights > 1 ? 's' : ''}` : 'Passing through'; }
     tip.appendChild(em); if (G.reduce) paint();
   });
   canvas.addEventListener('pointerleave', () => { G.hover = null; tip.hidden = true; paint(); });
   canvas.addEventListener('click', (e) => {
     const r = canvas.getBoundingClientRect(), hit = pickAt(e.clientX - r.left, e.clientY - r.top); if (!hit) return;
-    if (hit.leg) select(hit.leg.id);
+    if (hit.reel) pickReel(hit.reel);
+    else if (hit.leg) select(hit.leg.id);
     else { const L = rows.find((x) => x.kind !== 'alt' && x.to === hit.pin.name) || rows.find((x) => x.from === hit.pin.name); if (L) select(L.id); }
   });
 

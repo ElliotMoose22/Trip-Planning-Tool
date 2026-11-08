@@ -7,7 +7,7 @@ on:
     branches: [main]
     paths: ["site/**", "reports/plan.json", ".github/workflows/pages.yml"]
   workflow_run:
-    workflows: ["Weekly price report"]
+    workflows: ["Weekly price report", "Daily reels"]
     types: [completed]
   workflow_dispatch: {}
 

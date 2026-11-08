@@ -449,5 +449,104 @@
    ],
    "legs": []
   }
- ]
+ ],
+ "reels": [
+  {
+   "place": "Kamakura",
+   "country": "Japan",
+   "lat": 35.319,
+   "lon": 139.55,
+   "rating": 9,
+   "sender": "Cat",
+   "link": "https://www.instagram.com/reel/sample1",
+   "fits": "Day trip from Tokyo (~0.9 hrs each way)",
+   "colour": "Green",
+   "photo": ""
+  },
+  {
+   "place": "Hua Hin",
+   "country": "Thailand",
+   "lat": 12.568,
+   "lon": 99.958,
+   "rating": 8,
+   "sender": "Elliot",
+   "link": "https://www.instagram.com/reel/sample2",
+   "fits": "On the way from Bangkok to Phuket (~3.1 hrs from Bangkok) \u2014 worth a night",
+   "colour": "Yellow",
+   "photo": ""
+  },
+  {
+   "place": "Phi Phi Islands",
+   "country": "Thailand",
+   "lat": 7.74,
+   "lon": 98.77,
+   "rating": 10,
+   "sender": "Cat",
+   "link": "https://www.instagram.com/reel/sample3",
+   "fits": "Day trip from Phuket (~1.0 hrs each way)",
+   "colour": "Green",
+   "photo": ""
+  },
+  {
+   "place": "Nusa Penida",
+   "country": "Indonesia",
+   "lat": -8.727,
+   "lon": 115.544,
+   "rating": 9,
+   "sender": "Elliot",
+   "link": "https://www.instagram.com/reel/sample4",
+   "fits": "Day trip from Bali (~0.8 hrs each way)",
+   "colour": "Green",
+   "photo": ""
+  },
+  {
+   "place": "Ha Long Bay",
+   "country": "Vietnam",
+   "lat": 20.91,
+   "lon": 107.18,
+   "rating": 9,
+   "sender": "Cat",
+   "link": "https://www.instagram.com/reel/sample5",
+   "fits": "Overnight trip from Hanoi (~3.0 hrs each way)",
+   "colour": "Yellow",
+   "photo": ""
+  },
+  {
+   "place": "Chiang Mai",
+   "country": "Thailand",
+   "lat": 18.79,
+   "lon": 98.98,
+   "rating": 6,
+   "sender": "Elliot",
+   "link": "https://www.instagram.com/reel/sample6",
+   "fits": "Doesn't fit the route \u2014 ~582 km from Bangkok",
+   "colour": "Red",
+   "photo": ""
+  },
+  {
+   "place": "Maehama Beach (Aka Island)",
+   "country": "Japan",
+   "lat": 26.198,
+   "lon": 127.283,
+   "rating": 7,
+   "sender": "Unknown (1149805394053151)",
+   "link": "https://www.instagram.com/reel/De_B_-UNUVj/",
+   "fits": "Day trip from Okinawa (~0.9 hrs each way)",
+   "colour": "Green",
+   "photo": ""
+  },
+  {
+   "place": "Kumamoto Castle",
+   "country": "Japan",
+   "lat": 32.806,
+   "lon": 130.706,
+   "rating": 8,
+   "sender": "Elliot",
+   "link": "https://www.instagram.com/reel/DJgqqhRv50W/",
+   "fits": "Day trip from Fukuoka (~2.0 hrs each way)",
+   "colour": "Green",
+   "photo": ""
+  }
+ ],
+ "daytrip_km": 115.38461538461539
 }

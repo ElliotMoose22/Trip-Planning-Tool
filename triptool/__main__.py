@@ -182,6 +182,8 @@ def main(argv=None):
         if not getattr(plan, "reels", None):
             print("No Reels tab in the sheet yet.")
             return
+        from .report import update_plan_reels
+        print(f"Map data: {update_plan_reels(plan)} reels in reports/plan.json")
         if not os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
             print("Reels placed but not saved: GOOGLE_SERVICE_ACCOUNT_JSON isn't set.")
             return
