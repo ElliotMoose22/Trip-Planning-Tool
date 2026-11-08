@@ -1,50 +1,67 @@
-# Asia Trip Tool ✈️
+# Trip Planning Tool ✈️
 
-Planning tool for our June–July 2027 trip: Japan → Thailand → Indonesia → Vietnam.
+Planning tool for our June–August 2027 trip: Japan → Thailand → Indonesia → Vietnam → Greece → Croatia.
 
-**What it does now:** every Sunday it checks flight and hotel prices for each leg of the trip,
-saves the history, and writes a report that says **BUY / WATCH / WAIT** for each item.
+**Our Google Sheet is the plan.** Every Sunday the tool reads the latest version of the sheet,
+prices every flight and hotel in it, and writes a report that says:
 
-**Coming next:** paste Instagram reel links → places get pulled out and suggested for the itinerary.
+- **BUY / WATCH / WAIT** for each flight and stay, with price history
+- **Cheaper swaps**: the same flight a day or two earlier or later, or from a nearby airport
+- **Things to fix in the sheet**: flights in the calendar but not the flights tab, days where the
+  calendar has you in a different city from where the flight leaves, vague stops ("THAILAND"), notes
+  that don't match where you'll be
+- **Option A vs B** when the flights tab lists an alternative (the "OR" table)
 
-## Try it (no API key needed)
+Dates and cities are treated loosely: anything the sheet doesn't spell out is filled in with a best
+guess, marked *assumed*, and listed so you can fix it in the sheet.
+
+**Coming next:** a 3D globe of the route and suggestions, then Instagram reels → place ideas.
+
+## Setup (GitHub secrets)
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | What |
+|---|---|
+| `TRIP_SHEET_URL` | The Google Sheet link. The sheet must be shared as *Anyone with the link → Viewer*. |
+| `SERPAPI_KEY` | From [serpapi.com](https://serpapi.com), for real Google Flights / Hotels prices. Without it you get demo prices. |
+
+Then **Actions → Weekly price report → Run workflow** to run it now. After that it runs every Sunday
+morning and saves `reports/latest.html` (the report) and `reports/plan.json` (data for the globe).
+
+## How the sheet is read
+
+- **Calendar tab**: weekly blocks. A row of dates, then *where you are* ("JAPAN - TOKYO",
+  "THAILAND to INDONESIA"), then notes. City names in the notes count too ("Fukuoka to Kagoshima"
+  = you end the day in Kagoshima). The year comes from which weekday column the dates are in.
+- **flights tab**: Date / Depart / Arrive / Cost / Length / Flight Number / Booked. Mark `Booked`
+  TRUE to stop tracking a flight. A second table to the right (after "OR") is option B.
+- New city? Add it to `triptool/places.py` (airports + coordinates).
+
+## Settings
+
+[`trip.yaml`](trip.yaml): how many days of flexibility to search, the weekly search cap (fit it to
+your SerpApi plan), hotel budgets by country, and which neighbourhood to look in for each city.
+
+## Run locally
 
 ```bash
 pip install -r requirements.txt
-python -m triptool demo        # fake price history → reports/demo/latest.html
+export TRIP_SHEET_URL="https://docs.google.com/spreadsheets/d/…"
+python -m triptool plan     # how the sheet was read + the checks, no searches
+python -m triptool demo     # full report with fake prices → reports/demo/latest.html
+python -m triptool run      # real thing (needs SERPAPI_KEY)
 python -m pytest -q
 ```
-
-## Track real prices
-
-1. Get a key at [serpapi.com](https://serpapi.com) (Google Flights + Google Hotels data).
-2. Locally: `SERPAPI_KEY=... python -m triptool run` → `reports/latest.html`
-3. On GitHub: **Settings → Secrets and variables → Actions → New secret** named `SERPAPI_KEY`.
-   The **Weekly price report** workflow then runs every Sunday morning, commits the updated
-   history and report, and shows a summary table on the workflow run page.
-   Run it any time from the **Actions** tab → *Run workflow*.
-
-Each weekly run uses about one search per flight date + one per city (≈26 with the default `trip.yaml`).
-
-## Change the plan
-
-Everything lives in [`trip.yaml`](trip.yaml): legs, dates, how many days of flexibility to search,
-hotel areas and nightly budgets. Set `booked: true` on anything you've bought to stop tracking it.
-
-## How the BUY / WAIT call works
-
-See [`triptool/signals.py`](triptool/signals.py). Short version: wait until the usual booking window
-(≈2–6 months out for long-haul, 3–14 weeks for flights within Asia), then buy when the price is at
-or below what we've typically seen. Unusually cheap prices trigger a BUY early. These are rules of
-thumb, not predictions.
 
 ## Layout
 
 ```
-trip.yaml                 the plan
-triptool/providers.py     where prices come from (demo, SerpApi)
-triptool/store.py         SQLite price history (data/prices.db)
-triptool/signals.py       BUY / WATCH / WAIT rules
-triptool/report.py        HTML + Markdown report
-.github/workflows/        weekly schedule
+triptool/sheet.py       download + read the Google Sheet
+triptool/plan.py        nights, stops, legs, checks
+triptool/places.py      city → airports + coordinates, nearby alternatives
+triptool/recommend.py   what to search each week, and the swaps worth suggesting
+triptool/providers.py   prices (demo, SerpApi)
+triptool/signals.py     BUY / WATCH / WAIT rules
+triptool/report.py      HTML / Markdown report + plan.json
 ```

@@ -1,7 +1,7 @@
-"""Load trip.yaml into simple dataclasses and expand flexible date windows."""
+"""Settings from trip.yaml. The trip itself comes from the Google Sheet."""
 from __future__ import annotations
 
-import datetime as dt
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -9,68 +9,35 @@ import yaml
 
 
 @dataclass
-class FlightLeg:
-    id: str
-    label: str
-    origin: str
-    destination: str
-    date: dt.date
-    flex_days: int = 0
-    booked: bool = False
-
-    def search_dates(self) -> list[dt.date]:
-        return [self.date + dt.timedelta(days=d) for d in range(-self.flex_days, self.flex_days + 1)]
-
-
-@dataclass
-class Stay:
-    id: str
-    label: str
-    query: str
-    check_in: dt.date
-    check_out: dt.date
-    max_price_per_night: float | None = None
-    booked: bool = False
-
-    @property
-    def nights(self) -> int:
-        return (self.check_out - self.check_in).days
+class Settings:
+    name: str = "Asia 2027"
+    sheet_url: str = ""
+    currency: str = "CAD"
+    flex_days: int = 2
+    max_searches: int = 45
+    suggest_if_saves: float = 30
+    hotel_min_nights: int = 2
+    hotel_adults: int = 2
+    hotel_skip: list[str] = field(default_factory=list)
+    hotel_max_price: dict[str, float] = field(default_factory=dict)   # by country
+    hotel_areas: dict[str, str] = field(default_factory=dict)         # city -> search text
+    hotel_typical: dict[str, float] = field(default_factory=dict)     # demo prices by country
 
 
-@dataclass
-class Trip:
-    name: str
-    travelers: int
-    currency: str
-    start: dt.date
-    end: dt.date
-    flights: list[FlightLeg] = field(default_factory=list)
-    stays: list[Stay] = field(default_factory=list)
-
-
-def _date(v) -> dt.date:
-    return v if isinstance(v, dt.date) else dt.date.fromisoformat(str(v))
-
-
-def load_trip(path: str | Path = "trip.yaml") -> Trip:
-    raw = yaml.safe_load(Path(path).read_text())
-    t = raw["trip"]
-    flights = [
-        FlightLeg(
-            id=f["id"], label=f["label"], origin=f["origin"], destination=f["destination"],
-            date=_date(f["date"]), flex_days=int(f.get("flex_days", 0)), booked=bool(f.get("booked", False)),
-        )
-        for f in raw.get("flights", [])
-    ]
-    stays = [
-        Stay(
-            id=s["id"], label=s["label"], query=s["query"],
-            check_in=_date(s["check_in"]), check_out=_date(s["check_out"]),
-            max_price_per_night=s.get("max_price_per_night"), booked=bool(s.get("booked", False)),
-        )
-        for s in raw.get("stays", [])
-    ]
-    return Trip(
-        name=t["name"], travelers=int(t.get("travelers", 1)), currency=t.get("currency", "CAD"),
-        start=_date(t["start"]), end=_date(t["end"]), flights=flights, stays=stays,
+def load_settings(path: str | Path = "trip.yaml") -> Settings:
+    raw = yaml.safe_load(Path(path).read_text()) if Path(path).exists() else {}
+    s, search, hotels = raw.get("trip", {}), raw.get("search", {}), raw.get("hotels", {})
+    return Settings(
+        name=s.get("name", "Asia 2027"),
+        sheet_url=os.environ.get("TRIP_SHEET_URL") or raw.get("sheet", {}).get("url", ""),
+        currency=s.get("currency", "CAD"),
+        flex_days=int(search.get("flex_days", 2)),
+        max_searches=int(search.get("max_searches_per_run", 45)),
+        suggest_if_saves=float(search.get("suggest_if_saves", 30)),
+        hotel_min_nights=int(hotels.get("min_nights", 2)),
+        hotel_adults=int(hotels.get("adults", 2)),
+        hotel_skip=[x.lower() for x in hotels.get("skip", [])],
+        hotel_max_price={k.lower(): float(v) for k, v in (hotels.get("max_price_per_night") or {}).items()},
+        hotel_areas={k.lower(): v for k, v in (hotels.get("areas") or {}).items()},
+        hotel_typical={k.lower(): float(v) for k, v in (hotels.get("typical_price") or {}).items()},
     )

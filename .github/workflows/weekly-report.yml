@@ -16,10 +16,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
-      - name: Check prices and build report
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+      - name: Read the sheet, check prices, build report
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL }}
         run: python -m triptool run
       - name: Post summary
         run: cat reports/latest.md >> "$GITHUB_STEP_SUMMARY"

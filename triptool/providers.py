@@ -3,9 +3,9 @@
 - DemoProvider: deterministic fake prices so everything runs with no API key.
 - SerpApiProvider: real Google Flights / Google Hotels results via serpapi.com.
   Set SERPAPI_KEY to use it. (Amadeus Self-Service, the old free default,
-  was shut down in July 2026, so it isn't an option.)
+  was shut down in July 2026.)
 
-Add another provider by implementing `flight_price` and `stay_price`.
+Flight prices are per person. Hotel prices are per night for the room.
 """
 from __future__ import annotations
 
@@ -15,51 +15,47 @@ import math
 import os
 from dataclasses import dataclass
 
-from .config import FlightLeg, Stay
-
 
 @dataclass
 class Quote:
     item_id: str
     kind: str              # "flight" | "stay"
     travel_date: dt.date   # departure date / check-in
-    price: float           # total for the whole party (flight) or per night (stay)
+    price: float
     currency: str
-    detail: str = ""       # airline / hotel name
+    detail: str = ""
     link: str = ""
     source: str = ""
 
 
+def _hash(key: str) -> float:
+    """Stable number in [-1, 1) for a key."""
+    return (int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % 2000) / 1000 - 1
+
+
 class DemoProvider:
-    """Plausible, repeatable prices that drift over time. Clearly labelled as demo."""
+    """Plausible, repeatable prices that drift week to week. Clearly labelled as demo."""
 
     name = "demo"
-    BASE = {"yyz-tyo": 1150, "tyo-bkk": 260, "bkk-dps": 190, "dps-sgn": 170, "han-yyz": 1050}
-    STAY_BASE = {"tokyo": 210, "bangkok": 95, "bali": 120, "hcmc": 70}
 
     def __init__(self, today: dt.date | None = None):
         self.today = today or dt.date.today()
+        self.week = "%d-%d" % self.today.isocalendar()[:2]
 
-    def _wiggle(self, key: str, amp: float) -> float:
-        h = int(hashlib.sha256(key.encode()).hexdigest()[:8], 16)
-        return ((h % 1000) / 1000 - 0.5) * 2 * amp
-
-    def flight_price(self, leg: FlightLeg, date: dt.date, travelers: int, currency: str) -> Quote | None:
-        base = self.BASE.get(leg.id, 300)
+    def flight_price(self, item_id, origin, dest, date, adults, currency, ref=None) -> Quote | None:
+        base = ref or 300
         days_out = (date - self.today).days
-        # cheapest ~2-4 months out, pricier far out and very close in
         curve = 1 + 0.12 * math.tanh((days_out - 220) / 90) + 0.35 * max(0, (60 - days_out) / 60)
-        noise = self._wiggle(f"{leg.id}{date}{self.today.isocalendar()[:2]}", 0.08)
+        route = 1 + 0.15 * _hash(f"{origin}{dest}") if "@" in item_id else 1
+        noise = 0.07 * _hash(f"{item_id}{date}{self.week}")
         weekday = 1.06 if date.weekday() in (4, 6) else 1.0
-        per_person = round(base * curve * weekday * (1 + noise))
-        return Quote(leg.id, "flight", date, per_person * travelers, currency,
-                     detail="Demo Air", source=self.name)
+        return Quote(item_id, "flight", date, round(base * curve * route * weekday * (1 + noise)), currency,
+                     detail="Demo Air · 1 stop", source=self.name)
 
-    def stay_price(self, stay: Stay, currency: str) -> Quote | None:
-        base = self.STAY_BASE.get(stay.id, 100)
-        noise = self._wiggle(f"{stay.id}{self.today.isocalendar()[:2]}", 0.12)
-        return Quote(stay.id, "stay", stay.check_in, round(base * (1 + noise)), currency,
-                     detail="Demo Hotel", source=self.name)
+    def stay_price(self, item_id, query, check_in, check_out, adults, max_price, currency, ref=None) -> Quote | None:
+        base = ref or 120
+        return Quote(item_id, "stay", check_in, round(base * (1 + 0.12 * _hash(f"{item_id}{self.week}"))),
+                     currency, detail="Demo Hotel (4.5★)", source=self.name)
 
 
 class SerpApiProvider:
@@ -67,7 +63,7 @@ class SerpApiProvider:
     URL = "https://serpapi.com/search.json"
 
     def __init__(self, api_key: str | None = None):
-        import requests  # local import so demo mode needs nothing extra
+        import requests
         self.requests = requests
         self.key = api_key or os.environ["SERPAPI_KEY"]
 
@@ -76,37 +72,36 @@ class SerpApiProvider:
         r.raise_for_status()
         return r.json()
 
-    def flight_price(self, leg: FlightLeg, date: dt.date, travelers: int, currency: str) -> Quote | None:
+    def flight_price(self, item_id, origin, dest, date, adults, currency, ref=None) -> Quote | None:
         data = self._get({
             "engine": "google_flights", "type": 2,  # one-way
-            "departure_id": leg.origin, "arrival_id": leg.destination,
-            "outbound_date": date.isoformat(), "adults": travelers, "currency": currency, "hl": "en",
+            "departure_id": origin, "arrival_id": dest, "outbound_date": date.isoformat(),
+            "adults": adults, "currency": currency, "hl": "en",
         })
-        options = (data.get("best_flights") or []) + (data.get("other_flights") or [])
-        options = [o for o in options if o.get("price")]
+        options = [o for o in (data.get("best_flights") or []) + (data.get("other_flights") or []) if o.get("price")]
         if not options:
             return None
         best = min(options, key=lambda o: o["price"])
-        airlines = ", ".join(sorted({seg.get("airline", "?") for seg in best.get("flights", [])}))
-        stops = max(0, len(best.get("flights", [])) - 1)
-        return Quote(leg.id, "flight", date, float(best["price"]), currency,
-                     detail=f"{airlines} · {stops} stop{'s' if stops != 1 else ''}",
+        segs = best.get("flights", [])
+        airlines = ", ".join(sorted({s.get("airline", "?") for s in segs}))
+        stops = max(0, len(segs) - 1)
+        hours = best.get("total_duration", 0) / 60
+        return Quote(item_id, "flight", date, float(best["price"]) / adults, currency,
+                     detail=f"{airlines} · {'nonstop' if not stops else f'{stops} stop' + ('s' if stops > 1 else '')} · {hours:.0f}h",
                      link=data.get("search_metadata", {}).get("google_flights_url", ""), source=self.name)
 
-    def stay_price(self, stay: Stay, currency: str) -> Quote | None:
-        params = {
-            "engine": "google_hotels", "q": stay.query, "check_in_date": stay.check_in.isoformat(),
-            "check_out_date": stay.check_out.isoformat(), "adults": 2, "currency": currency,
-            "hl": "en", "sort_by": 8, "rating": 8,  # highest rated, 4.0+
-        }
-        if stay.max_price_per_night:
-            params["max_price"] = int(stay.max_price_per_night)
-        data = self._get(params)
-        props = [p for p in data.get("properties", []) if p.get("rate_per_night", {}).get("extracted_lowest")]
+    def stay_price(self, item_id, query, check_in, check_out, adults, max_price, currency, ref=None) -> Quote | None:
+        params = {"engine": "google_hotels", "q": query, "check_in_date": check_in.isoformat(),
+                  "check_out_date": check_out.isoformat(), "adults": adults, "currency": currency,
+                  "hl": "en", "sort_by": 8, "rating": 8}   # highest rated, 4.0+
+        if max_price:
+            params["max_price"] = int(max_price)
+        props = [p for p in self._get(params).get("properties", [])
+                 if p.get("rate_per_night", {}).get("extracted_lowest")]
         if not props:
             return None
         best = min(props[:10], key=lambda p: p["rate_per_night"]["extracted_lowest"])
-        return Quote(stay.id, "stay", stay.check_in, float(best["rate_per_night"]["extracted_lowest"]), currency,
+        return Quote(item_id, "stay", check_in, float(best["rate_per_night"]["extracted_lowest"]), currency,
                      detail=f"{best.get('name', '?')} ({best.get('overall_rating', '–')}★)",
                      link=best.get("link", ""), source=self.name)
 
