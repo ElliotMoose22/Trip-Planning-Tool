@@ -6,7 +6,9 @@
  *
  * How messages are read:
  *   - a shared reel            → new row (Received, From, Reel link, Caption), Status "New"
- *   - a number 1–10 on its own → rating for that person's most recent unrated reel
+ *   - a number 1–10            → rating for that person's most recent unrated reel
+ *   - "8 Kamakura, Enoshima"   → rating plus the places in that reel (one map pin each);
+ *                                use brackets for a region: "9 Ubud (Bali), Tegallalang"
  *   - "elliot" or "cat"        → tells the script whose Instagram account this is (once each)
  * Everything else (place, map colour, photo) is filled in by the trip tool's daily run.
  *
@@ -59,8 +61,8 @@ function handle_(ev) {
     reels.forEach((a) => addReel_(who, a.payload || {}));
 
     const text = (msg.text || '').trim();
-    const m = text.match(/^(\d{1,2})(?:\s*\/\s*10)?$/);
-    if (!reels.length && m && +m[1] >= 1 && +m[1] <= 10) rate_(who, +m[1]);
+    const m = text.match(/^(\d{1,2})(?:\s*\/\s*10)?(?:[\s,:\-–]+(.+))?$/s);
+    if (!reels.length && m && +m[1] >= 1 && +m[1] <= 10) rate_(who, +m[1], (m[2] || '').trim());
   } finally {
     lock.releaseLock();
   }
@@ -73,6 +75,7 @@ function senderName_(id, text) {
   if (id && (t === 'elliot' || t === 'cat')) {
     senders[id] = t === 'cat' ? 'Cat' : 'Elliot';
     props.setProperty('SENDERS', JSON.stringify(senders));
+    relabel_(`Unknown (${id})`, senders[id]);       // fix reels sent before saying who you are
     return null;
   }
   return senders[id] || `Unknown (${id})`;
@@ -104,7 +107,7 @@ function addReel_(who, p) {
   put('status', 'New');
 }
 
-function rate_(who, rating) {
+function rate_(who, rating, places) {
   const { sh, col } = sheet_();
   const last = sh.getLastRow();
   if (last <= HEADER_ROW) return;
@@ -112,12 +115,26 @@ function rate_(who, rating) {
   const from = sh.getRange(HEADER_ROW + 1, col('from'), n, 1).getValues();
   const rate = sh.getRange(HEADER_ROW + 1, col('rating'), n, 1).getValues();
   const link = sh.getRange(HEADER_ROW + 1, col('reel link'), n, 1).getValues();
+  const place = sh.getRange(HEADER_ROW + 1, col('place'), n, 1).getValues();
   for (let i = n - 1; i >= 0; i--) {
     if (String(from[i][0]) === who && String(link[i][0]).trim() && String(rate[i][0]).trim() === '') {
-      sh.getRange(HEADER_ROW + 1 + i, col('rating')).setValue(rating);
+      for (let j = 0; j < n; j++) {               // a reel already split into several places: rate them all
+        if (String(link[j][0]) === String(link[i][0]) && String(rate[j][0]).trim() === '') {
+          sh.getRange(HEADER_ROW + 1 + j, col('rating')).setValue(rating);
+        }
+      }
+      if (places && !String(place[i][0]).trim()) sh.getRange(HEADER_ROW + 1 + i, col('place')).setValue(places);
       return;
     }
   }
+}
+
+function relabel_(oldName, name) {
+  const { sh, col } = sheet_();
+  const last = sh.getLastRow();
+  if (last <= HEADER_ROW) return;
+  const r = sh.getRange(HEADER_ROW + 1, col('from'), last - HEADER_ROW, 1);
+  r.setValues(r.getValues().map((x) => [String(x[0]) === oldName ? name : x[0]]));
 }
 
 /** Run this once from the editor to check the script can write to the tab. */

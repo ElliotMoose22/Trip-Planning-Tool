@@ -49,5 +49,9 @@ Without the token everything still works except the caption reading: type the pl
 ## Sending a reel
 1. Share the reel to the trip account.
 2. Send the rating as its own message: `8` (or `8/10`).
+   - Several places in one reel? Add them after the rating: `8 Kamakura, Enoshima`. Each gets its own pin.
+     Put a region in brackets so it stays with its place: `9 Ubud (Bali), Tegallalang`.
+   - Just `8` works too: Claude lists every place the caption names (it can't see the video or photos,
+     so name the places yourself when the caption doesn't).
 3. By the next evening it's on the map at the dashboard, in the Ideas tab, and if it needs a night
    somewhere new, in Recommendations. Run **Actions → Daily reels → Run workflow** to do it now.

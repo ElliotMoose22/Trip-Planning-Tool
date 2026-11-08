@@ -64,7 +64,8 @@ DM reels to the trip Instagram account and send a rating (1–10) after each one
 sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every evening `daily-reels.yml` runs
 `python -m triptool reels`, which:
 
-1. reads the caption with Claude to work out the place (or uses what you typed in **Place**),
+1. reads the caption with Claude to work out every place it names (or uses the places you sent after the
+   rating, like `8 Kamakura, Enoshima`); a reel with several places becomes one row and pin per place,
 2. finds it on the map and grabs a photo from Wikipedia,
 3. sorts it against your stops: **green** = day trip (≤ 2.5 hrs, about 115 km) from a stop,
    **yellow** = needs a night (on the way between two stops, or a short overnight from one),

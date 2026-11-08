@@ -41,3 +41,14 @@ def test_reels_are_coloured_and_sorted():
     assert "Add a night in Hua Hin between Bangkok and Phuket" in titles
     assert "Ha Long Bay: an overnight trip from Hanoi" in titles
     assert any("Chiang Mai doesn't fit" in t for t in titles)
+
+
+def test_multi_place_reels_split_into_rows():
+    from triptool.reels import split_places
+    rows, _ = parse_reels(REELS[:3] + [["Nov 8", "Elliot", "https://instagram.com/reel/m", "Kyushu loop", "9",
+                                        "Kumamoto Castle; Mount Aso, Ubud (Bali)"]])
+    assert split_places(rows) == 2
+    m = [r for r in rows if r.link.endswith("/m")]
+    assert [r.place for r in m] == ["Kumamoto Castle", "Mount Aso", "Ubud (Bali)"]
+    assert all(r.rating == 9 and r.sender == "Elliot" for r in m)
+    assert m[1].new and m[1].row == m[0].row + 1 and not m[0].new

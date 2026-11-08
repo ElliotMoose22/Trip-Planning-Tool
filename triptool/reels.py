@@ -55,6 +55,7 @@ class ReelRow:
     km: float | None = None
     hours: float | None = None
     changed: bool = False
+    new: bool = False
 
 
 def _num(v: str) -> float | None:
@@ -91,9 +92,11 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
 # ---------- 1. read the place from the caption ----------
 
 PROMPT = """You read Instagram reel captions for a trip planner. The trip covers Japan, Thailand, Indonesia and Vietnam.
-For each caption, name the single most specific place someone could travel to (an attraction, beach, island, park or town),
-plus its country. If a caption doesn't name a real place, use null. Answer with JSON only, no prose:
-[{"i": <number>, "place": "<name as a map would know it>" or null, "country": "<country>" or null}]
+For each caption, list every specific place someone could travel to that the caption names (attractions, beaches,
+islands, parks or towns), most important first, at most 6. Skip vague regions when a specific spot is named, and skip
+restaurants or shops unless that's all there is. Give each place's country. If a caption names no real place, give [].
+Answer with JSON only, no prose:
+[{"i": <number>, "places": [{"place": "<name as a map would know it>", "country": "<country>"}]}]
 
 Captions:
 """
@@ -116,10 +119,44 @@ def extract_places(rows: list[ReelRow]) -> int:
     n = 0
     for a in answer:
         i = a.get("i")
-        if isinstance(i, int) and 0 <= i < len(todo) and a.get("place"):
-            todo[i].place, todo[i].country, todo[i].changed = a["place"], a.get("country") or "", True
+        found = [p for p in (a.get("places") or []) if isinstance(p, dict) and p.get("place")]
+        if not found and a.get("place"):
+            found = [{"place": a["place"], "country": a.get("country")}]
+        if isinstance(i, int) and 0 <= i < len(todo) and found:
+            names = [str(p["place"]).replace(",", " ").replace(";", " ").strip() for p in found[:6]]
+            countries = {p.get("country") or "" for p in found}
+            todo[i].place = "; ".join(names)
+            todo[i].country = countries.pop() if len(countries) == 1 else (found[0].get("country") or "")
+            todo[i].changed = True
             n += 1
     return n
+
+
+# ---------- 1b. one row per place ----------
+
+SPLIT = re.compile(r"\s*(?:[,;\n]|\s\+\s)\s*")
+
+
+def split_places(rows: list[ReelRow]) -> int:
+    """A reel naming several places ("Kamakura, Enoshima") becomes one row per place: the first stays on
+    the reel's row, the rest are added as new rows under the table with the same link, sender and rating.
+    Write a region in brackets to keep it with its place: "Ubud (Bali)"."""
+    new, nxt = [], max((r.row for r in rows), default=0) + 1
+    for r in rows:
+        if r.lat is not None or not r.place:
+            continue
+        names = [n for n in SPLIT.split(r.place) if n]
+        if len(names) < 2:
+            continue
+        r.place, r.changed = names[0], True
+        for n in names[1:]:
+            extra = ReelRow(nxt, r.received, r.sender, r.link, "↳ same reel as the row above",
+                            r.rating, n, r.country, None, None, "From a multi-place reel")
+            extra.changed, extra.new = True, True
+            new.append(extra)
+            nxt += 1
+    rows.extend(new)
+    return len(new)
 
 
 # ---------- 2. coordinates ----------
@@ -130,7 +167,8 @@ def geocode(rows: list[ReelRow], session=None) -> int:
     n = 0
     for r in rows:
         if r.place and (r.lat is None or r.lon is None):
-            q = f"{r.place}, {r.country}" if r.country else r.place
+            name = re.sub(r"\s*\((.*?)\)", r", \1", r.place)
+            q = f"{name}, {r.country}" if r.country else name
             try:
                 res = s.get("https://nominatim.openstreetmap.org/search", params={"q": q, "format": "json", "limit": 1,
                             "accept-language": "en", "addressdetails": 1}, headers={"User-Agent": UA}, timeout=30).json()
@@ -311,6 +349,9 @@ def write_back(rows: list[ReelRow], cols: dict[str, int], tab: str = "Reels") ->
                 "lon": r.lon if r.lon is not None else "", "fits": r.fits, "colour": r.colour,
                 "photo": r.photo, "photo_data": r.photo_data,
                 "status": r.status if r.status and not r.colour else ("Placed" if r.colour else r.status)}
+        if r.new:
+            vals.update({"received": r.received, "from": r.sender, "link": r.link, "caption": r.caption,
+                         "rating": r.rating or ""})
         for k, v in vals.items():
             if cols.get(k) is not None and (v != "" or k in ("fits", "colour", "status")):
                 data.append({"range": f"'{tab}'!{col_letter(cols[k])}{r.row + 1}", "values": [[v]]})
@@ -326,6 +367,8 @@ def process(rows: list[ReelRow], stops: list[Stop], daytrip_hours: float = 2.5, 
     stats = {"read": 0, "located": 0, "photos": 0}
     if online:
         stats["read"] = extract_places(rows)
+    stats["split"] = split_places(rows)
+    if online:
         stats["located"] = geocode(rows)
         stats["photos"] = fetch_photos(rows)
     for r in rows:
