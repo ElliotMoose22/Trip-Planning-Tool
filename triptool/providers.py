@@ -26,6 +26,8 @@ class Quote:
     detail: str = ""
     link: str = ""
     source: str = ""
+    flight_no: str = ""
+    duration: str = ""
 
 
 def _hash(key: str) -> float:
@@ -85,10 +87,14 @@ class SerpApiProvider:
         segs = best.get("flights", [])
         airlines = ", ".join(sorted({s.get("airline", "?") for s in segs}))
         stops = max(0, len(segs) - 1)
-        hours = best.get("total_duration", 0) / 60
+        mins = best.get("total_duration", 0)
+        layovers = [l.get("name", "") for l in best.get("layovers", [])]
+        duration = f"{mins // 60} hrs {mins % 60} mins" + (f" (via {', '.join(l.split(' ')[0] for l in layovers)})" if layovers else "")
         return Quote(item_id, "flight", date, float(best["price"]) / adults, currency,
-                     detail=f"{airlines} · {'nonstop' if not stops else f'{stops} stop' + ('s' if stops > 1 else '')} · {hours:.0f}h",
-                     link=data.get("search_metadata", {}).get("google_flights_url", ""), source=self.name)
+                     detail=f"{airlines} · {'nonstop' if not stops else f'{stops} stop' + ('s' if stops > 1 else '')} · {mins / 60:.0f}h",
+                     link=data.get("search_metadata", {}).get("google_flights_url", ""), source=self.name,
+                     flight_no=" & ".join(s.get("flight_number", "") for s in segs if s.get("flight_number")),
+                     duration=duration)
 
     def stay_price(self, item_id, query, check_in, check_out, adults, max_price, currency, ref=None) -> Quote | None:
         params = {"engine": "google_hotels", "q": query, "check_in_date": check_in.isoformat(),

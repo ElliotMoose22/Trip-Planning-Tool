@@ -18,10 +18,11 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
-      - name: Read the sheet, check prices, build report
+      - name: Read the sheet, check prices, build report, update your table
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: python -m triptool run
       - name: Post summary
         run: cat reports/latest.md >> "$GITHUB_STEP_SUMMARY"

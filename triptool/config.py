@@ -1,6 +1,7 @@
 """Settings from trip.yaml. The trip itself comes from the Google Sheet."""
 from __future__ import annotations
 
+import datetime as dt
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,10 @@ import yaml
 class Settings:
     name: str = "Asia 2027"
     sheet_url: str = ""
+    start: dt.date | None = None       # only plan inside this window
+    end: dt.date | None = None
+    home: str = "Toronto"
+    my_table: str = "Elliot Flights"  # title of the table the tool tracks and updates
     currency: str = "CAD"
     flex_days: int = 2
     max_searches: int = 45
@@ -30,6 +35,8 @@ def load_settings(path: str | Path = "trip.yaml") -> Settings:
     return Settings(
         name=s.get("name", "Asia 2027"),
         sheet_url=os.environ.get("TRIP_SHEET_URL") or raw.get("sheet", {}).get("url", ""),
+        start=_date(s.get("start")), end=_date(s.get("end")), home=s.get("home", "Toronto"),
+        my_table=raw.get("sheet", {}).get("my_flights_table", "Elliot Flights"),
         currency=s.get("currency", "CAD"),
         flex_days=int(search.get("flex_days", 2)),
         max_searches=int(search.get("max_searches_per_run", 45)),
@@ -41,3 +48,9 @@ def load_settings(path: str | Path = "trip.yaml") -> Settings:
         hotel_areas={k.lower(): v for k, v in (hotels.get("areas") or {}).items()},
         hotel_typical={k.lower(): float(v) for k, v in (hotels.get("typical_price") or {}).items()},
     )
+
+
+def _date(v) -> dt.date | None:
+    if v in (None, ""):
+        return None
+    return v if isinstance(v, dt.date) else dt.date.fromisoformat(str(v))

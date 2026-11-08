@@ -160,6 +160,7 @@ class PlannedFlight:
     note: str = ""
     option: str = "A"          # "B" = the alternative table
     source: str = "flights tab"
+    row: int | None = None     # 0-based row in the tab (for writing back)
 
 
 def _money(v: str) -> float | None:
@@ -167,9 +168,30 @@ def _money(v: str) -> float | None:
     return float(m.group().replace(",", "")) if m else None
 
 
+@dataclass
+class FlightTable:
+    flights: list[PlannedFlight]
+    title_row: int | None
+    header_row: int
+    cols: dict[str, int]       # date/from/to/cost/len/no/booked/notes -> column index
+
+
 def parse_flights(grid: Grid, year: int) -> list[PlannedFlight]:
+    t = parse_flight_table(grid, year)
+    return t.flights if t else []
+
+
+def parse_flight_table(grid: Grid, year: int, title: str | None = None) -> FlightTable | None:
+    """The first Date/Depart/Arrive table, or the first one under a cell containing `title`."""
+    start, title_row = 0, None
+    if title:
+        title_row = next((r for r, row in enumerate(grid)
+                          if any(title.lower() in v.lower() for v in row)), None)
+        if title_row is None:
+            return None
+        start = title_row + 1
     hdr_row, cols = None, {}
-    for r, row in enumerate(grid):
+    for r, row in enumerate(grid[start:], start):
         low = [v.strip().lower() for v in row]
         if "date" in low and ("depart" in low or "from" in low):
             hdr_row = r
@@ -179,9 +201,12 @@ def parse_flights(grid: Grid, year: int) -> list[PlannedFlight]:
                                    "no": ["flight number", "flight", "flight #"], "booked": ["booked"]}.items():
                     if v in names and key not in cols:
                         cols[key] = c
+                if v.startswith("notes") and "notes" not in cols:
+                    cols["notes"] = c
             break
     if hdr_row is None:
-        return []
+        return None
+    notes_col = cols.pop("notes", None)
     last = max(cols.values())
     flights: list[PlannedFlight] = []
 
@@ -198,11 +223,14 @@ def parse_flights(grid: Grid, year: int) -> list[PlannedFlight]:
 
     rel = {k: v - cols["date"] for k, v in cols.items()}
     rel_b = {k: v for k, v in rel.items() if k != "booked"}   # right-hand table has no Booked column
-    for row in grid[hdr_row + 1:]:
+    for r, row in enumerate(grid[hdr_row + 1:], hdr_row + 1):
         if _at([row], 0, cols["date"]).strip().lower() == "total":
+            break
+        if not any(v.strip() for v in row):
             break
         f = mk(row, cols["date"], rel, "A")
         if f:
+            f.row = r
             extra = [v.strip() for c, v in enumerate(row) if c > last and v.strip()]
             # a second date further right starts the alternative ("OR") table
             for c in range(last + 1, len(row)):
@@ -216,4 +244,7 @@ def parse_flights(grid: Grid, year: int) -> list[PlannedFlight]:
             flights.append(f)
     # Rows that appear in both options are the same flight
     a_keys = {(f.date, f.origin.lower(), f.destination.lower()) for f in flights if f.option == "A"}
-    return [f for f in flights if f.option == "A" or (f.date, f.origin.lower(), f.destination.lower()) not in a_keys]
+    flights = [f for f in flights if f.option == "A" or (f.date, f.origin.lower(), f.destination.lower()) not in a_keys]
+    if notes_col is None:
+        notes_col = cols.get("booked", last) + 1
+    return FlightTable(flights, title_row, hdr_row, {**cols, "notes": notes_col})

@@ -1,11 +1,17 @@
 # Settings. The trip itself (dates, cities, flights) comes from your Google Sheet.
 trip:
-  name: "Asia 2027"
+  name: "Elliot · Asia 2027"
   currency: CAD
+  start: 2027-06-06          # only plan this part of the sheet (Cat continues to Europe after)
+  end: 2027-07-12
+  home: Toronto              # where your last flight should land
 
 sheet:
   # Leave blank and set the TRIP_SHEET_URL secret on GitHub instead (keeps the link private).
   url: ""
+  # The table in the flights tab the tool tracks, and updates every Sunday
+  # (Cost / Length / Flight Number / Notes). Rows marked Booked are left alone.
+  my_flights_table: "Elliot Flights"
 
 search:
   flex_days: 2               # also price flights up to this many days before/after your planned date

@@ -21,13 +21,14 @@ import sys
 from .config import Settings, load_settings
 from .plan import Check, Plan, build_plan
 from .providers import DemoProvider, get_provider
-from .recommend import plan_searches, summarize
+from .recommend import km, plan_searches, summarize
 from .report import build_stays, write_report
-from .sheet import download, find_tab, hidden_years, parse_calendar, parse_flights
+from .sheet import FlightTable, download, find_tab, hidden_years, parse_calendar, parse_flight_table
 from .store import Store
 
 
-def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> Plan:
+def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan, FlightTable | None, str]:
+    """Returns the plan, your flights table (if the sheet has one) and the flights tab's name."""
     if sheet_json:
         grids = json.load(open(sheet_json))
     elif s.sheet_url:
@@ -35,16 +36,30 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> Plan:
     else:
         sys.exit("No sheet configured. Set TRIP_SHEET_URL (or sheet.url in trip.yaml), or pass --sheet-json.")
     cal, fl = find_tab(grids, "calendar"), find_tab(grids, "flights")
+    tab = next(t for t, g in grids.items() if g is fl)
     days = parse_calendar(cal, today=today)
     year = days[0].date.year if days else today.year + 1
-    plan = build_plan(days, parse_flights(fl, year))
+
+    # Your own table wins; otherwise fall back to the first table in the tab.
+    mine = parse_flight_table(fl, year, s.my_table) if s.my_table else None
+    table = mine or parse_flight_table(fl, year)
+    flights = table.flights if table else []
+    if mine:
+        for f in flights:
+            f.source = "my table"
+
+    # Only plan inside the trip window
+    inside = lambda d: (not s.start or d >= s.start) and (not s.end or d <= s.end)
+    days = [d for d in days if inside(d.date)]
+    flights = [f for f in flights if inside(f.date)]
+    plan = build_plan(days, flights, s.home)
     wrong = sorted((hidden_years(cal) | hidden_years(fl)) - {year})
     if wrong:
         plan.checks.append(Check("heads-up", f"Your date cells are stored as {', '.join(map(str, wrong))} dates "
                                  f"(the year is hidden by the formatting), but the weekday columns only line up "
                                  f"with {year}, so I'm reading the trip as {year}. Nothing to do unless you add "
                                  f"formulas that use those dates."))
-    return plan
+    return plan, mine, tab
 
 
 def run_searches(plan: Plan, s: Settings, store: Store, provider, today: dt.date, verbose=True) -> dict:
@@ -53,7 +68,7 @@ def run_searches(plan: Plan, s: Settings, store: Store, provider, today: dt.date
     for x in searches:
         try:
             if x.kind == "flight":
-                ref = x.leg.flight.cost
+                ref = x.leg.flight.cost or round(70 + 0.09 * km(x.origin, x.dest))   # demo fallback by distance
                 q = provider.flight_price(x.item_id, x.origin.codes, x.dest.codes, x.date, 1, s.currency, ref)
                 label = f"{x.origin.name} → {x.dest.name}"
             else:
@@ -79,7 +94,26 @@ def run_searches(plan: Plan, s: Settings, store: Store, provider, today: dt.date
 def report(plan, s, store, results, source, today, out_dir):
     legs = summarize(plan, results, s)
     stays = build_stays(plan, s, results, store, source, today)
-    return write_report(s, plan, legs, stays, store, source, today, out_dir)
+    return write_report(s, plan, legs, stays, store, source, today, out_dir), legs
+
+
+def update_sheet(s, table, tab, legs, store, source, today) -> None:
+    """Write this week's prices into your table. Real prices only, and only with Google credentials."""
+    import os
+    from .report import leg_signal
+    from .writeback import build_updates, push
+    if table is None:
+        print("Sheet update skipped: no table titled", repr(s.my_table))
+        return
+    if source == "demo":
+        print("Sheet update skipped: demo prices are never written to the sheet.")
+        return
+    if not os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+        print("Sheet update skipped: GOOGLE_SERVICE_ACCOUNT_JSON isn't set.")
+        return
+    sigs = {lr.leg.id: leg_signal(lr, store, source, today) for lr in legs}
+    data = build_updates(table, tab, legs, sigs, today)
+    print(f"Updated {push(s.sheet_url, data)} cells in your table.")
 
 
 def main(argv=None):
@@ -94,7 +128,7 @@ def main(argv=None):
 
     s = load_settings(a.settings)
     today = dt.date.today()
-    plan = load_plan(s, a.sheet_json, today)
+    plan, table, tab = load_plan(s, a.sheet_json, today)
 
     if a.command == "plan":
         print(f"Trip year: {plan.year}\n\nStops:")
@@ -119,14 +153,19 @@ def main(argv=None):
             day = today - dt.timedelta(weeks=w)
             with contextlib.redirect_stdout(io.StringIO()):
                 results = run_searches(plan, s, store, DemoProvider(today=day), day)
-        print(f"Demo report: {report(plan, s, store, results, 'demo', today, 'reports/demo')}")
+        print(f"Demo report: {report(plan, s, store, results, 'demo', today, 'reports/demo')[0]}")
         return
 
     store = Store(a.db)
     provider = get_provider(a.provider)
     print(f"Checking prices with {provider.name}…")
     results = run_searches(plan, s, store, provider, today)
-    print(f"Report: {report(plan, s, store, results, provider.name, today, 'reports')}")
+    path, legs = report(plan, s, store, results, provider.name, today, "reports")
+    print(f"Report: {path}")
+    try:
+        update_sheet(s, table, tab, legs, store, provider.name, today)
+    except Exception as e:   # the report is already saved; don't fail the whole run
+        print(f"! Couldn't update the sheet: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

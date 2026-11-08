@@ -76,7 +76,7 @@ def _strip_who(text: str) -> str:
     return re.sub(r"^\s*cat\b\s*", "", text, flags=re.I).strip()
 
 
-def build_plan(days: list[Day], flights: list[PlannedFlight]) -> Plan:
+def build_plan(days: list[Day], flights: list[PlannedFlight], home: str | None = None) -> Plan:
     checks: list[Check] = []
     unknown: set[str] = set()
     a_flights = [f for f in flights if f.option == "A"]
@@ -209,12 +209,17 @@ def build_plan(days: list[Day], flights: list[PlannedFlight]) -> Plan:
             seen_notes.add(note)
             for p in P.mentioned(note):
                 week = [n for n in nights if abs((n.date - d.date).days) <= 3]
-                if all(n.place != p for n in week):
-                    there = [s for s in stops if s.place == p]
+                there = [s for s in stops if s.place == p]
+                if there and all(n.place != p for n in week):
                     when = (f" — the calendar has you there {there[0].check_in:%b %-d}–{there[-1].check_out:%b %-d}"
                             if there else "")
                     checks.append(Check("heads-up", f"Note beside the week of {d.date:%b %-d}: “{note}”, but you're "
                                         f"not in {p.name} that week{when}. Worth checking the event dates."))
+    if home and stops and legs:
+        last = max(legs, key=lambda l: l.flight.date)
+        if last.destination.name.lower() != home.lower():
+            checks.append(Check("fix", f"Your last flight lands in {last.destination.name}, not {home} — "
+                                f"add your flight home to your table."))
     for u in sorted(unknown):
         checks.append(Check("heads-up", f"I don't know where “{u}” is — add it to triptool/places.py."))
 

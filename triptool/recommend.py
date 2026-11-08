@@ -85,6 +85,7 @@ class LegResult:
     plan_price: float | None = None
     plan_detail: str = ""
     plan_link: str = ""
+    plan_quote: object = None
     by_date: dict[dt.date, float] = field(default_factory=dict)
     suggestions: list[Suggestion] = field(default_factory=list)
 
@@ -105,7 +106,7 @@ def summarize(plan: Plan, results: dict[tuple[str, dt.date], "object"], s: Setti
             if iid == leg.id:
                 r.by_date[day] = q.price
                 if day == f.date:
-                    r.plan_price, r.plan_detail, r.plan_link = q.price, q.detail, q.link
+                    r.plan_price, r.plan_detail, r.plan_link, r.plan_quote = q.price, q.detail, q.link, q
         ref = r.plan_price if r.plan_price is not None else f.cost
         threshold = max(s.suggest_if_saves, 0.1 * ref) if ref else s.suggest_if_saves
 
