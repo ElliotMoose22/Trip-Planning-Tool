@@ -1,0 +1,344 @@
+{
+ "generated": "2026-11-08",
+ "source": "sheet",
+ "stops": [
+  {
+   "name": "Manila",
+   "country": "Philippines",
+   "lat": 14.6,
+   "lon": 120.98,
+   "check_in": "2027-06-06",
+   "check_out": "2027-06-07",
+   "nights": 1,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Tokyo",
+   "country": "Japan",
+   "lat": 35.68,
+   "lon": 139.69,
+   "check_in": "2027-06-07",
+   "check_out": "2027-06-11",
+   "nights": 4,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Fukuoka",
+   "country": "Japan",
+   "lat": 33.59,
+   "lon": 130.4,
+   "check_in": "2027-06-11",
+   "check_out": "2027-06-13",
+   "nights": 2,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Kagoshima",
+   "country": "Japan",
+   "lat": 31.6,
+   "lon": 130.56,
+   "check_in": "2027-06-13",
+   "check_out": "2027-06-14",
+   "nights": 1,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Okinawa",
+   "country": "Japan",
+   "lat": 26.21,
+   "lon": 127.68,
+   "check_in": "2027-06-14",
+   "check_out": "2027-06-17",
+   "nights": 3,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Bangkok",
+   "country": "Thailand",
+   "lat": 13.76,
+   "lon": 100.5,
+   "check_in": "2027-06-17",
+   "check_out": "2027-06-27",
+   "nights": 10,
+   "assumed": true,
+   "hotel_price": null
+  },
+  {
+   "name": "Bali",
+   "country": "Indonesia",
+   "lat": -8.65,
+   "lon": 115.22,
+   "check_in": "2027-06-27",
+   "check_out": "2027-07-05",
+   "nights": 8,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Hanoi",
+   "country": "Vietnam",
+   "lat": 21.03,
+   "lon": 105.85,
+   "check_in": "2027-07-05",
+   "check_out": "2027-07-12",
+   "nights": 7,
+   "assumed": true,
+   "hotel_price": null
+  }
+ ],
+ "legs": [
+  {
+   "id": "YYZ-HND",
+   "from": "Toronto",
+   "to": "Tokyo",
+   "from_ll": [
+    43.65,
+    -79.38
+   ],
+   "to_ll": [
+    35.68,
+    139.69
+   ],
+   "date": "2027-06-06",
+   "option": "A",
+   "booked": true,
+   "flight_no": "",
+   "sheet_price": 630.0,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "BOOKED",
+   "reason": "Already booked.",
+   "suggestions": []
+  },
+  {
+   "id": "HND-FUK",
+   "from": "Tokyo",
+   "to": "Fukuoka",
+   "from_ll": [
+    35.68,
+    139.69
+   ],
+   "to_ll": [
+    33.59,
+    130.4
+   ],
+   "date": "2027-06-11",
+   "option": "A",
+   "booked": false,
+   "flight_no": "GK 509",
+   "sheet_price": 132.0,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "WATCH",
+   "reason": "No prices yet.",
+   "suggestions": []
+  },
+  {
+   "id": "KOJ-OKA",
+   "from": "Kagoshima",
+   "to": "Okinawa",
+   "from_ll": [
+    31.6,
+    130.56
+   ],
+   "to_ll": [
+    26.21,
+    127.68
+   ],
+   "date": "2027-06-14",
+   "option": "A",
+   "booked": false,
+   "flight_no": "",
+   "sheet_price": null,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "WATCH",
+   "reason": "No prices yet.",
+   "suggestions": []
+  },
+  {
+   "id": "OKA-BKK",
+   "from": "Okinawa",
+   "to": "Bangkok",
+   "from_ll": [
+    26.21,
+    127.68
+   ],
+   "to_ll": [
+    13.76,
+    100.5
+   ],
+   "date": "2027-06-17",
+   "option": "A",
+   "booked": false,
+   "flight_no": "FD 241",
+   "sheet_price": 214.0,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "WATCH",
+   "reason": "No prices yet.",
+   "suggestions": []
+  },
+  {
+   "id": "HKT-DPS",
+   "from": "Phuket",
+   "to": "Bali",
+   "from_ll": [
+    7.88,
+    98.39
+   ],
+   "to_ll": [
+    -8.65,
+    115.22
+   ],
+   "date": "2027-06-27",
+   "option": "A",
+   "booked": false,
+   "flight_no": "QZ 247",
+   "sheet_price": 145.0,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "WATCH",
+   "reason": "No prices yet.",
+   "suggestions": []
+  },
+  {
+   "id": "CGK-HAN",
+   "from": "Jakarta",
+   "to": "Hanoi",
+   "from_ll": [
+    -6.21,
+    106.85
+   ],
+   "to_ll": [
+    21.03,
+    105.85
+   ],
+   "date": "2027-07-05",
+   "option": "A",
+   "booked": false,
+   "flight_no": "VJ 928",
+   "sheet_price": 139.0,
+   "price": null,
+   "detail": "",
+   "link": "",
+   "verdict": "WATCH",
+   "reason": "No prices yet.",
+   "suggestions": []
+  }
+ ],
+ "ground": [
+  {
+   "from": "Fukuoka",
+   "to": "Kagoshima",
+   "from_ll": [
+    33.59,
+    130.4
+   ],
+   "to_ll": [
+    31.6,
+    130.56
+   ],
+   "by": "2027-06-13",
+   "mode": "Train",
+   "km": 288,
+   "hours": 2.6
+  },
+  {
+   "from": "Bangkok",
+   "to": "Phuket",
+   "from_ll": [
+    13.76,
+    100.5
+   ],
+   "to_ll": [
+    7.88,
+    98.39
+   ],
+   "by": "2027-06-27",
+   "mode": "Bus",
+   "km": 901,
+   "hours": 16.4
+  },
+  {
+   "from": "Bali",
+   "to": "Jakarta",
+   "from_ll": [
+    -8.65,
+    115.22
+   ],
+   "to_ll": [
+    -6.21,
+    106.85
+   ],
+   "by": "2027-07-05",
+   "mode": "Bus + ferry",
+   "km": 1250,
+   "hours": 25.2
+  }
+ ],
+ "alternatives": [
+  {
+   "leg": "HKT-DPS",
+   "route": "Bangkok \u2192 Bali",
+   "price": null,
+   "saves": null,
+   "kind": "calendar",
+   "from_ll": [
+    13.76,
+    100.5
+   ],
+   "to_ll": [
+    -8.65,
+    115.22
+   ]
+  },
+  {
+   "leg": "CGK-HAN",
+   "route": "Bali \u2192 Hanoi",
+   "price": null,
+   "saves": null,
+   "kind": "calendar",
+   "from_ll": [
+    -8.65,
+    115.22
+   ],
+   "to_ll": [
+    21.03,
+    105.85
+   ]
+  }
+ ],
+ "checks": [
+  {
+   "level": "heads-up",
+   "text": "Jun 27: your flight leaves Phuket, but you're in Bangkok the night before \u2014 about 16 hrs by bus. Plan an overnight trip or a night in Phuket, or fly from Bangkok instead (priced below)."
+  },
+  {
+   "level": "heads-up",
+   "text": "Jul 5: your flight leaves Jakarta, but you're in Bali the night before \u2014 about 25 hrs by bus + ferry. Plan an overnight trip or a night in Jakarta, or fly from Bali instead (priced below)."
+  },
+  {
+   "level": "heads-up",
+   "text": "Jun 17\u2013Jun 27: 9 nights only say \u201cTHAILAND\u201d, so I've assumed Bangkok for hotels. Add a city to change it."
+  },
+  {
+   "level": "heads-up",
+   "text": "Jun 27\u2013Jul 5: 3 nights only say \u201cINDONESIA - Parks\u201d, so I've assumed Bali for hotels. Add a city to change it."
+  },
+  {
+   "level": "heads-up",
+   "text": "Jul 5\u2013Jul 12: 6 nights only say \u201cVIETNAM\u201d, so I've assumed Hanoi for hotels. Add a city to change it."
+  }
+ ]
+}

@@ -271,11 +271,26 @@ def plan_json(plan: Plan, legs: list[LegResult], sigs: dict, stays: list[StayRes
         "ground": [{"from": g.origin.name, "to": g.destination.name, "from_ll": [g.origin.lat, g.origin.lon],
                     "to_ll": [g.destination.lat, g.destination.lon], "by": g.by.isoformat(), "mode": g.mode,
                     "km": round(g.km), "hours": round(g.hours, 1)} for g in plan.ground],
-        "alternatives": [{"leg": lr.leg.id, "route": x.route, "price": x.price, "saves": x.saves, "kind": x.kind,
-                          "from_ll": _ll(x.route.split(" → ")[0]), "to_ll": _ll(x.route.split(" → ")[1])}
-                         for lr in legs for x in lr.suggestions if x.route],
+        "alternatives": _alternatives(legs),
         "checks": [{"level": c.level, "text": c.text} for c in plan.checks],
     }
+
+
+def _alternatives(legs: list[LegResult]) -> list[dict]:
+    """Priced swaps, plus the fly-instead routes for overland legs even before they have a price."""
+    out, seen = [], set()
+    for lr in legs:
+        for x in lr.suggestions:
+            if x.route:
+                seen.add((lr.leg.id, x.route))
+                out.append({"leg": lr.leg.id, "route": x.route, "price": x.price, "saves": x.saves, "kind": x.kind,
+                            "from_ll": _ll(x.route.split(" → ")[0]), "to_ll": _ll(x.route.split(" → ")[1])})
+        for o in lr.leg.alt_origins:
+            route = f"{o.name} → {lr.leg.destination.name}"
+            if (lr.leg.id, route) not in seen:
+                out.append({"leg": lr.leg.id, "route": route, "price": None, "saves": None, "kind": "calendar",
+                            "from_ll": [o.lat, o.lon], "to_ll": [lr.leg.destination.lat, lr.leg.destination.lon]})
+    return out
 
 
 def _ll(name: str):
