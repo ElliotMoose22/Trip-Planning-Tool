@@ -18,11 +18,14 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
+      - name: Install Claude Code (reads each reel's caption)
+        run: npm i -g @anthropic-ai/claude-code
       - name: Read the sheet, check prices, build report, update your table
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: python -m triptool run
       - name: Post summary
         run: cat reports/latest.md >> "$GITHUB_STEP_SUMMARY"

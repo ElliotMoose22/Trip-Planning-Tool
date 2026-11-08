@@ -55,6 +55,14 @@
   .tg .legs tr.on td { background: color-mix(in srgb, var(--globe-flight) 16%, transparent); }
   .tg .legs tr.ground td { color: var(--color-fg-muted); }
   .tg .legs td.num, .tg .legs th.num { text-align:right; }
+  .tg .legend .lr i { width:9px; height:9px; border:0; border-radius: 2px; transform: rotate(45deg); vertical-align: 0; margin-right:7px; }
+  .tg .legend .lr.g i { background:#5fd39a; } .tg .legend .lr.y i { background:#f5c542; } .tg .legend .lr.r i { background:#ef5b56; }
+  .tg .detail .reel-photo { width:100%; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 8px; margin: 8px 0 4px; background: var(--color-border-line); display:block; }
+  .tg .detail .reel-nophoto { width:100%; aspect-ratio: 16 / 10; border-radius: 8px; margin: 8px 0 4px; display:flex; align-items:center; justify-content:center; background: color-mix(in srgb, var(--color-fg) 6%, transparent); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tg .detail .dot { display:inline-block; width:10px; height:10px; border-radius:2px; transform: rotate(45deg); margin-right:6px; }
+  .tg .detail .stars { font-family: var(--font-anthropic-serif); font-size: 22px; }
+  .tg .detail a.reel-link { color: inherit; font-size: var(--cds-font-size-caption); }
+  .tg .recs .chip.idea { background:#f8d1e6; color:#991a59; }
   .tg .recs-card { padding-bottom: var(--cds-pad-md); }
   .tg .recs { list-style:none; margin:0; padding:0; display:grid; gap: 6px; max-height: 420px; overflow:auto; }
   .tg .recs li { border:1px solid var(--color-border-line); border-radius: 8px; padding: 8px 10px; cursor:pointer; }
@@ -94,7 +102,7 @@
 
   <div class="main">
     <div class="globe-card">
-      <div class="globe" id="globe" data-draw="globe" data-source="route stops countries"></div>
+      <div class="globe" id="globe" data-draw="globe" data-source="route stops countries reels"></div>
       <div class="globe-bar">
         <span class="hint">Your route, June 6 – July 12</span>
         <div class="btns">
@@ -108,6 +116,9 @@
         <span class="lb"><i></i>Booked</span>
         <span class="lg"><i></i>Bus / train</span>
         <span class="la"><i></i>Could fly instead</span>
+        <span class="lr g"><i></i>Reel: day trip</span>
+        <span class="lr y"><i></i>Reel: needs a night</span>
+        <span class="lr r"><i></i>Reel: off the route</span>
       </div>
     </div>
 
@@ -236,6 +247,33 @@
     },
   });
 
+  // Reels tab -> one row per placed reel.
+  dash.loader('reels', {
+    description: 'Reads the Reels tab: one row per reel that has coordinates, with its rating, who sent it, how it fits and its photo.',
+    fn: ({ answer }) => {
+      let a = answer;
+      if (a && Array.isArray(a.content)) a = a.content.map((c) => c.text || '').join('');
+      if (typeof a === 'string') a = JSON.parse(a);
+      const values = (a && a.values) || [];
+      const head = values.findIndex((r) => r.some((c) => /^reel link$/i.test(String(c).trim())));
+      if (head < 0) return [];
+      const h = values[head].map((c) => String(c).trim().toLowerCase());
+      const ix = (n) => h.findIndex((x) => x.startsWith(n));
+      const at = (r, n) => { const i = ix(n); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+      const photoCol = h.findIndex((x) => x === 'photo data');
+      const rows = [];
+      values.slice(head + 1).forEach((r, i) => {
+        const lat = Number(at(r, 'lat')), lon = Number(at(r, 'lon'));
+        if (!at(r, 'place') || !Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+        const photo = photoCol >= 0 ? String(r[photoCol] ?? '') : '';
+        rows.push({ id: `r${i}`, place: at(r, 'place'), country: at(r, 'country'), lat, lon, rating: Number(at(r, 'rating')) || null,
+                    sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'),
+                    photo: photo.startsWith('data:image/') ? photo : '' });
+      });
+      return rows;
+    },
+  });
+
   // Where you sleep: each arrival until the next departure; the trip ends July 12.
   dash.calc('stops', {
     inputs: ['route'],
@@ -278,7 +316,8 @@
 
   window.tripMap = window.tripMap || {
     selected: null, focus: null,
-    select(id) { this.selected = id; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); },
+    select(id) { this.selected = id; this.reel = null; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); },
+    pickReel(r) { this.reel = r; this.selected = null; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); },
     focusOn(rec) {
       this.focus = rec ? { n: rec.n, places: new Set(rec.places.split(',').map((s) => s.trim()).filter(Boolean)),
                            legs: new Set(rec.legs.split(';').map((s) => s.trim()).filter(Boolean)) } : null;
@@ -357,6 +396,22 @@
     el.replaceChildren();
     if (r.status !== 'ok' || !r.data.length) { el.textContent = '—'; return; }
     const rows = r.data;
+    const R = window.tripMap.reel;
+    if (R) {
+      const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
+      add('div', 'kicker', `Reel · sent by ${R.sender || 'one of you'}`);
+      add('div', 'route', R.place);
+      if (R.photo) { const img = add('img', 'reel-photo'); img.src = R.photo; img.alt = R.place; }
+      else add('div', 'reel-nophoto', 'Photo arrives with the next weekly check');
+      const line = add('p', null); line.style.margin = '6px 0 0';
+      const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = R.colour === 'Green' ? '#5fd39a' : R.colour === 'Yellow' ? '#f5c542' : '#ef5b56';
+      line.append(dot, document.createTextNode(R.fits || ''));
+      const dl = add('dl');
+      const row2 = (k, v) => { if (v == null || v === '') return; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
+      row2('Rating', R.rating ? `${R.rating} / 10` : 'not rated yet'); row2('Sent by', R.sender); row2('Country', R.country);
+      if (R.link) { const a = add('a', 'reel-link', 'Open the reel ↗'); a.href = R.link; a.target = '_blank'; a.rel = 'noopener'; a.style.display = 'inline-block'; a.style.marginTop = '10px'; }
+      return;
+    }
     const pick = rows.find((x) => x.id === window.tripMap.selected) || rows.find((x) => x.kind === 'flight' && !x.booked) || rows[0];
     const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
     const kind = pick.kind === 'ground' ? 'Overland' : pick.kind === 'alt' ? 'Option' : 'Flight';
@@ -434,6 +489,11 @@
 
       const pickAt = (mx, my) => {
         let best = null, bd = 10;
+        for (const R of st.reels || []) {
+          const s = toScreen(R.lon, R.lat, 0); if (s[2] <= 0) continue;
+          const d = Math.hypot(s[0] - mx, s[1] - my); if (d < bd) { bd = d; best = { reel: R }; }
+        }
+        if (best) return best;
         for (const p of st.pins || []) {
           const s = toScreen(p.lon, p.lat, 0); if (s[2] <= 0) continue;
           const d = Math.hypot(s[0] - mx, s[1] - (my + 8)); if (d < bd) { bd = d; best = { pin: p }; }
@@ -455,7 +515,9 @@
         canvas.classList.toggle('over', !!hit);
         if (hit) {
           tip.hidden = false; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`;
-          if (hit.leg) { const L = hit.leg; tip.replaceChildren(document.createTextNode(`${L.from} → ${L.to}`));
+          if (hit.reel) { const R = hit.reel; tip.replaceChildren(document.createTextNode(R.place));
+            const em = document.createElement('em'); em.textContent = `${R.rating ? R.rating + '/10' : 'unrated'} · ${R.sender}`; tip.appendChild(em); }
+          else if (hit.leg) { const L = hit.leg; tip.replaceChildren(document.createTextNode(`${L.from} → ${L.to}`));
             const em = document.createElement('em'); em.textContent = `${L.when} · ${L.kind === 'flight' ? (L.cost == null ? 'no price yet' : '$' + d3.format(',')(L.cost)) : L.how}`; tip.appendChild(em); }
           else { const P = hit.pin; tip.replaceChildren(document.createTextNode(P.name));
             const em = document.createElement('em'); em.textContent = P.home ? 'Start' : P.nights ? `${P.nights} night${P.nights > 1 ? 's' : ''}` : 'Passing through'; tip.appendChild(em); }
@@ -466,7 +528,8 @@
       canvas.addEventListener('click', (e) => {
         const r = canvas.getBoundingClientRect(), hit = pickAt(e.clientX - r.left, e.clientY - r.top);
         if (!hit) return;
-        if (hit.leg) window.tripMap.select(hit.leg.id);
+        if (hit.reel) window.tripMap.pickReel(hit.reel);
+        else if (hit.leg) window.tripMap.select(hit.leg.id);
         else { const L = (st.rows || []).find((x) => x.kind !== 'alt' && x.to === hit.pin.name) || (st.rows || []).find((x) => x.from === hit.pin.name);
           if (L) window.tripMap.select(L.id); }
       });
@@ -517,6 +580,7 @@
       }
       st.rows = route.status === 'ok' ? route.data : [];
       st.pins = stops.status === 'ok' ? stops.data : [];
+      const reels = dash.data('reels'); st.reels = reels.status === 'ok' ? reels.data : [];
       st.onRoute = (st.land || []).filter((f) => st.pins.some((p) => d3.geoContains(f, [p.lon, p.lat])));
       st.lines = st.rows.map((r) => ({ row: r, pts: st.arc([r.from_lat, r.from_lon], [r.to_lat, r.to_lon], r.kind === 'ground' ? 0 : r.kind === 'alt' ? 0.8 : 1), scr: [] }));
       if (!st.fitted && st.rows.length) { st.fitted = true; st.fit(); }
@@ -572,6 +636,14 @@
     // rim light
     ctx.strokeStyle = 'rgba(140,180,255,.25)'; ctx.lineWidth = 1; ctx.beginPath(); path({ type: 'Sphere' }); ctx.stroke();
 
+    // day-trip range around each stop (2.5 hrs each way ≈ 115 km)
+    const DAYTRIP_KM = 115;
+    ctx.setLineDash([3, 4]); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(95,211,154,.45)'; ctx.fillStyle = 'rgba(95,211,154,.06)';
+    for (const p of (st.pins || []).filter((p) => p.nights)) {
+      ctx.beginPath(); path(d3.geoCircle().center([p.lon, p.lat]).radius(DAYTRIP_KM / 111.2).precision(4)()); ctx.fill(); ctx.stroke();
+    }
+    ctx.setLineDash([]);
+
     // paths: shadow on the surface, then the lifted arc
     const sel = window.tripMap.selected;
     const order = (st.lines || []).slice().sort((a, b) => (a.row.id === sel) - (b.row.id === sel) || (a.row.id === st.hover) - (b.row.id === st.hover));
@@ -623,6 +695,20 @@
       placed.push([lx, ly, tw]);
       ctx.fillStyle = 'rgba(7,12,22,.75)'; ctx.fillRect(lx - 3, ly - 8, tw + 6, 16);
       ctx.fillStyle = '#e8eef8'; ctx.fillText(label, lx, ly);
+    }
+
+    // reel pins: small diamonds coloured by how they fit
+    const Fr = window.tripMap.focus, sel2 = window.tripMap.reel;
+    for (const R of st.reels || []) {
+      const s = st.toScreen(R.lon, R.lat, 0); if (s[2] <= 0.05) continue;
+      const [x, y] = s, on = sel2 && sel2.id === R.id, hit = Fr && Fr.places.has(R.place);
+      const c = R.colour === 'Green' ? '#5fd39a' : R.colour === 'Yellow' ? '#f5c542' : '#ef5b56';
+      const r = on || hit ? 7 : 5;
+      if (on || hit) { ctx.beginPath(); ctx.arc(x, y, r + 5, 0, 2 * Math.PI); ctx.strokeStyle = C('--globe-pick'); ctx.lineWidth = 2; ctx.stroke(); }
+      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = c; ctx.strokeStyle = '#0a1120'; ctx.lineWidth = 1.5; ctx.fillRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.strokeRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41);
+      ctx.restore();
+      if (st.k > 2.2 || on) { ctx.font = '500 10px ' + (C('--font-anthropic-sans') || 'system-ui'); ctx.fillStyle = 'rgba(232,238,248,.85)'; ctx.fillText(R.place, x + 9, y + 1); }
     }
   }
 </script>

@@ -52,6 +52,10 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan
             plan.places = places_parsed
             from .tables import recommend
             plan.recs = recommend(place_rows, leg_rows, s.start, s.end)
+            plan.place_rows = place_rows
+            if "reels" in names:
+                from .reels import parse_reels
+                plan.reels = parse_reels(grids[names["reels"]])
             return plan, table, names["legs"]
 
     # Fallback: the calendar + a flights table.
@@ -78,6 +82,20 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan
                                  f"with {year}, so I'm reading the trip as {year}. Nothing to do unless you add "
                                  f"formulas that use those dates."))
     return plan, mine, tab
+
+
+def handle_reels(plan: Plan, s: Settings, online: bool) -> None:
+    """Place every reel, sort it into the trip, and add 'Idea' recommendations."""
+    parsed = getattr(plan, "reels", None)
+    if not parsed:
+        return
+    from .reels import idea_recs, process
+    rows, _cols = parsed
+    stats = process(rows, plan.stops, s.daytrip_hours, online=online)
+    plan.recs = getattr(plan, "recs", []) + idea_recs(rows, plan.stops, getattr(plan, "place_rows", None))
+    placed = sum(1 for r in rows if r.colour)
+    print(f"Reels: {len(rows)} in the sheet, {placed} placed"
+          + (f" ({stats['read']} read from captions, {stats['located']} located, {stats['photos']} photos)" if online else ""))
 
 
 def run_searches(plan: Plan, s: Settings, store: Store, provider, today: dt.date, verbose=True) -> dict:
@@ -136,12 +154,16 @@ def update_sheet(s, plan, table, tab, legs, store, source, today) -> None:
     data += build_place_updates(getattr(plan, "places", None), "Places", recs)
     if recs:
         data += build_recs_updates(recs, today)
+    if getattr(plan, "reels", None):
+        from .reels import ideas_rows, ideas_update, write_back
+        rows, cols = plan.reels
+        data += write_back(rows, cols) + ideas_update(ideas_rows(rows, plan.stops))
     print(f"Updated {push(s.sheet_url, data)} cells in your sheet.")
 
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="triptool")
-    p.add_argument("command", choices=["run", "plan", "demo"])
+    p.add_argument("command", choices=["run", "plan", "demo", "reels"])
     p.add_argument("--settings", default="trip.yaml")
     p.add_argument("--sheet-json")
     p.add_argument("--db", default="data/prices.db")
@@ -153,7 +175,29 @@ def main(argv=None):
     today = dt.date.today()
     plan, table, tab = load_plan(s, a.sheet_json, today)
 
+    handle_reels(plan, s, online=a.command in ("run", "reels"))
+
+    if a.command == "reels":     # daily: place new reels, no price checks
+        import os
+        if not getattr(plan, "reels", None):
+            print("No Reels tab in the sheet yet.")
+            return
+        if not os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
+            print("Reels placed but not saved: GOOGLE_SERVICE_ACCOUNT_JSON isn't set.")
+            return
+        from .reels import ideas_rows, ideas_update, write_back
+        from .writeback import build_recs_updates, push
+        rows, cols = plan.reels
+        data = write_back(rows, cols) + ideas_update(ideas_rows(rows, plan.stops))
+        recs = getattr(plan, "recs", [])
+        if recs:
+            data += build_recs_updates(recs, today)
+        print(f"Updated {push(s.sheet_url, data)} cells in your sheet.")
+        return
+
     if a.command == "plan":
+        for r in (getattr(plan, "reels", None) or ([], {}))[0]:
+            print(f"  reel [{r.colour or 'not placed'}] {r.place or r.link}: {r.fits}")
         print(f"Trip year: {plan.year}\n\nStops:")
         for st in plan.stops:
             print(f"  {st.check_in:%b %d} → {st.check_out:%b %d}  {st.nights:>2} nights  {st.place.name}"

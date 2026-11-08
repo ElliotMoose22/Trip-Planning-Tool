@@ -1,0 +1,24 @@
+name: Daily reels
+
+on:
+  schedule:
+    - cron: "43 23 * * *"   # every evening ~7pm Toronto
+  workflow_dispatch: {}
+
+jobs:
+  reels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Install Claude Code (reads each reel's caption)
+        run: npm i -g @anthropic-ai/claude-code
+      - name: Place new reels on the trip
+        env:
+          TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: python -m triptool reels

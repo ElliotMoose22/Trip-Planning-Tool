@@ -31,7 +31,7 @@ run tracks the new flight), and it leaves Booked rows alone. Demo prices are nev
 Dates and cities are treated loosely: anything the sheet doesn't spell out is filled in with a best
 guess, marked *assumed*, and listed so you can fix it in the sheet.
 
-**Coming next:** a 3D globe of the route and suggestions, then Instagram reels → place ideas.
+**Also:** a 3D globe of the route ([live map](https://elliotmoose22.github.io/Trip-Planning-Tool/)) and an Instagram reels inbox (below).
 
 ## Setup (GitHub secrets)
 
@@ -42,6 +42,7 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 | `TRIP_SHEET_URL` | The Google Sheet link. The sheet must be shared as *Anyone with the link → Viewer*. |
 | `SERPAPI_KEY` | From [serpapi.com](https://serpapi.com), for real Google Flights / Hotels prices. Without it you get demo prices. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Lets the job write prices into your table. See below. |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Optional. From `claude setup-token`; lets the reels job read captions on your Claude plan. |
 
 ### Letting the weekly job edit the sheet
 
@@ -56,6 +57,24 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 
 Then **Actions → Weekly price report → Run workflow** to run it now. After that it runs every Sunday
 morning and saves `reports/latest.html` (the report) and `reports/plan.json` (data for the globe).
+
+## Instagram reels → trip ideas
+
+DM reels to the trip Instagram account and send a rating (1–10) after each one. An Apps Script in the
+sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every evening `daily-reels.yml` runs
+`python -m triptool reels`, which:
+
+1. reads the caption with Claude to work out the place (or uses what you typed in **Place**),
+2. finds it on the map and grabs a photo from Wikipedia,
+3. sorts it against your stops: **green** = day trip (≤ 2.5 hrs, about 115 km) from a stop,
+   **yellow** = needs a night (on the way between two stops, or a short overnight from one),
+   **red** = off the route,
+4. lists it under its country and stop in the **Ideas** tab, and adds an *Idea* recommendation when a
+   yellow reel deserves a night in between (e.g. Hua Hin between Bangkok and Phuket).
+
+The dashboard shows each reel as a small diamond pin with the day-trip rings around your stops; click
+one for the name, rating, who sent it and the photo. Setup: [instagram/SETUP.md](instagram/SETUP.md).
+Change the day-trip limit with `reels: daytrip_hours` in `trip.yaml`.
 
 ## How the sheet is read
 
@@ -95,6 +114,8 @@ triptool/providers.py   prices (demo, SerpApi)
 triptool/signals.py     BUY / WATCH / WAIT rules
 triptool/report.py      HTML / Markdown report + plan.json
 triptool/writeback.py   write prices + notes into your table in the sheet
+triptool/reels.py       reels → place, map colour, photo, Ideas tab
+instagram/              Apps Script inbox + setup steps
 
 
  ## OVERVIEW + IDEAS

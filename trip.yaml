@@ -45,3 +45,6 @@ hotels:
     Vietnam: 60
     Greece: 170
     Croatia: 160
+
+reels:
+  daytrip_hours: 2.5         # one way. Within this of a stop = green (day trip). Up to ~2x = yellow (overnight trip).

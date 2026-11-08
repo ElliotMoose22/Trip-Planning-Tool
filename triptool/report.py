@@ -280,6 +280,10 @@ def plan_json(plan: Plan, legs: list[LegResult], sigs: dict, stays: list[StayRes
                     "km": round(g.km), "hours": round(g.hours, 1)} for g in plan.ground],
         "alternatives": _alternatives(legs),
         "checks": [{"level": c.level, "text": c.text} for c in plan.checks],
+        "reels": [{"place": r.place, "country": r.country, "lat": r.lat, "lon": r.lon, "rating": r.rating,
+                   "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data}
+                  for r in ((getattr(plan, "reels", None) or ([], {}))[0]) if r.lat is not None],
+        "daytrip_km": __import__("triptool.reels", fromlist=["daytrip_km"]).daytrip_km(2.5),
         "recommendations": [{"kind": r.kind, "title": r.title, "detail": r.detail, "places": r.places, "legs": r.legs}
                             for r in getattr(plan, "recs", [])],
     }
