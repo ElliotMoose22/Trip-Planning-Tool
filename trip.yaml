@@ -1,0 +1,68 @@
+# Asia Trip 2027 — edit this file to change what gets tracked.
+trip:
+  name: "Asia 2027"
+  travelers: 2
+  currency: CAD
+  start: 2027-06-06
+  end: 2027-07-15
+
+# Each leg is tracked across a small window of dates so the report can
+# tell you which day is cheapest, not just whether prices moved.
+flights:
+  - id: yyz-tyo
+    label: "Toronto → Tokyo"
+    origin: YYZ
+    destination: HND,NRT
+    date: 2027-06-06
+    flex_days: 0          # already decided; set flex to explore nearby dates
+    booked: false
+  - id: tyo-bkk
+    label: "Tokyo → Bangkok"
+    origin: HND,NRT
+    destination: BKK,DMK
+    date: 2027-06-16
+    flex_days: 2
+  - id: bkk-dps
+    label: "Bangkok → Bali"
+    origin: BKK,DMK
+    destination: DPS
+    date: 2027-06-26
+    flex_days: 2
+  - id: dps-sgn
+    label: "Bali → Ho Chi Minh City"
+    origin: DPS
+    destination: SGN
+    date: 2027-07-05
+    flex_days: 2
+  - id: han-yyz
+    label: "Hanoi → Toronto"
+    origin: HAN
+    destination: YYZ
+    date: 2027-07-15
+    flex_days: 2
+
+stays:
+  - id: tokyo
+    label: "Tokyo"
+    query: "Shinjuku, Tokyo"
+    check_in: 2027-06-06
+    check_out: 2027-06-11
+    max_price_per_night: 250
+  - id: bangkok
+    label: "Bangkok"
+    query: "Sukhumvit, Bangkok"
+    check_in: 2027-06-16
+    check_out: 2027-06-20
+    max_price_per_night: 150
+  - id: bali
+    label: "Bali"
+    query: "Canggu, Bali"
+    check_in: 2027-06-26
+    check_out: 2027-07-01
+    max_price_per_night: 180
+  - id: hcmc
+    label: "Ho Chi Minh City"
+    query: "District 1, Ho Chi Minh City"
+    check_in: 2027-07-05
+    check_out: 2027-07-08
+    max_price_per_night: 120

@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+data/demo.db
+reports/demo/
