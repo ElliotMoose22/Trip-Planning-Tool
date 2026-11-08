@@ -47,11 +47,14 @@ def plan_searches(plan: Plan, s: Settings, today: dt.date) -> list[Search]:
             continue
         o, d = leg.origin, leg.destination
         out.append(Search("flight", leg.id, 0, f.date, leg, o, d, why="plan"))
-        for k in range(1, s.flex_days + 1):
-            for sign in (-1, 1):
-                day = f.date + dt.timedelta(days=sign * k)
-                if day > today:
-                    out.append(Search("flight", leg.id, 1 if k == 1 else 3, day, leg, o, d, why="date"))
+        lo, hi = getattr(leg, "window", (None, None))
+        lo = lo or f.date - dt.timedelta(days=s.flex_days)
+        hi = hi or f.date + dt.timedelta(days=s.flex_days)
+        days = [lo + dt.timedelta(days=i) for i in range((hi - lo).days + 1)]
+        days = sorted((x for x in days if x != f.date and x > today), key=lambda x: abs((x - f.date).days))[:8]
+        for day in days:
+            k = abs((day - f.date).days)
+            out.append(Search("flight", leg.id, 1 if k == 1 else 3, day, leg, o, d, why="date"))
         tried = {(o, d)}
         for alt in leg.alt_origins:
             out.append(Search("flight", f"{leg.id}@{alt.airports[0]}-{d.airports[0]}", 2, f.date, leg, alt, d,

@@ -3,7 +3,14 @@
 Planning tool for Elliot's part of our 2027 trip, **June 6 – July 12**: Japan → Thailand → Indonesia →
 Vietnam, then home to Toronto (Cat carries on to Greece and Croatia). Change the window in `trip.yaml`.
 
-**Our Google Sheet is the plan.** Every Sunday the tool reads the latest version of the sheet,
+**Our Google Sheet is the plan**, in two tabs:
+
+- **Places**: every stop with its country, priority (Must / Want / Maybe), min–max nights, fixed
+  dates, and the planned Arrive / Leave. Countries go in order: Japan → Thailand → Indonesia → Vietnam.
+- **Legs**: every bookable trip (flight, train, bus, ferry, car) with its mode, date or search window
+  (Earliest / Latest), status (Idea → Planned → Booked), price and booking ref.
+
+Rows are colour-coded by country to match the calendar. Every Sunday the tool reads the latest version of the sheet,
 prices every flight and hotel in it, and writes a report that says:
 
 - **BUY / WATCH / WAIT** for each flight and stay, with price history
@@ -13,10 +20,11 @@ prices every flight and hotel in it, and writes a report that says:
   that don't match where you'll be
 - **Option A vs B** when the flights tab lists an alternative (the "OR" table)
 
-**Your table in the sheet is the weekly tracker.** The tool tracks the flights in the table titled
-**"Elliot Flights - Current Recommendation"** (in the flights tab). Every Sunday it fills in each
-unbooked row's Cost, Length and Flight Number with the best current price for that date and route,
-and writes a Notes line: BUY / WATCH / WAIT, the change since last week, and up to two better options.
+**The Legs tab is the weekly tracker.** Every Sunday the tool fills in each unbooked flight's Price,
+Length and Flight no. with the best current price for that date and route (searching its Earliest /
+Latest window), and writes a Notes line: BUY / WATCH / WAIT, the change since last week, and up to two
+better options. It also writes each stop's checks into the Places tab's Notes column (nights outside
+your range, a Must without dates, gaps or overlaps, a move with no leg).
 It never changes Date / Depart / Arrive (to take a suggestion, edit the row yourself, and the next
 run tracks the new flight), and it leaves Booked rows alone. Demo prices are never written to the sheet.
 
@@ -51,6 +59,7 @@ morning and saves `reports/latest.html` (the report) and `reports/plan.json` (da
 
 ## How the sheet is read
 
+- **Places + Legs tabs** (preferred): read as-is. If they're missing, the tool falls back to:
 - **Calendar tab**: weekly blocks. A row of dates, then *where you are* ("JAPAN - TOKYO",
   "THAILAND to INDONESIA"), then notes. City names in the notes count too ("Fukuoka to Kagoshima"
   = you end the day in Kagoshima). The year comes from which weekday column the dates are in.

@@ -65,7 +65,7 @@
     <p class="lede"><b data-draw="t-flights" data-source="summary" data-field="flights">—</b> flights and
       <b data-draw="t-ground" data-source="summary" data-field="overland_legs">—</b> overland legs from
       <b data-draw="t-first" data-source="summary" data-field="first">—</b> to
-      <b data-draw="t-last" data-source="summary" data-field="last">—</b>, read live from your flights table.
+      <b data-draw="t-last" data-source="summary" data-field="last">—</b>, read live from the Legs tab of your sheet.
       Drag to spin, scroll or pinch to zoom, click a path or a pin.</p>
   </header>
 
@@ -101,7 +101,7 @@
       </section>
       <section class="card" id="legs">
         <h2>Every leg</h2>
-        <p class="note">Flights come from your table in the sheet; overland legs fill the gaps between them.</p>
+        <p class="note">Every row of the Legs tab: flights, trains, buses and ferries.</p>
         <table class="legs" data-source="route" data-row-key="id">
           <thead><tr>
             <th data-field="when">Date</th>
@@ -118,63 +118,71 @@
 </div>
 
 <script>
-  // Sheet rows -> one row per flight in "Elliot Flights", stopping at Total or a blank row.
+  // Legs tab rows -> one row per leg (flight, train, bus or ferry), stopping at the first empty From.
   dash.loader('my_flights', {
-    description: 'Finds the "Elliot Flights" table in the flights tab and returns one row per flight under its header, up to the Total row.',
+    description: 'Reads the Legs tab: one row per leg under its header, until the first row with no From.',
     fn: ({ answer }) => {
       let a = answer;
       if (a && Array.isArray(a.content)) a = a.content.map((c) => c.text || '').join('');
       if (typeof a === 'string') a = JSON.parse(a);
       const values = (a && a.values) || [];
-      const title = values.findIndex((r) => r.some((c) => /elliot flights/i.test(String(c))));
-      const head = values.findIndex((r, i) => i > title && r.some((c) => /^date$/i.test(String(c).trim())));
-      if (title < 0 || head < 0) return [];
+      const head = values.findIndex((r) => r.some((c) => /^from$/i.test(String(c).trim())) && r.some((c) => /^mode$/i.test(String(c).trim())));
+      if (head < 0) return [];
       const h = values[head].map((c) => String(c).trim().toLowerCase());
-      const at = (r, name) => { const i = h.findIndex((x) => x.startsWith(name)); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+      const at = (r, ...names) => { for (const n of names) { const i = h.findIndex((x) => x.startsWith(n)); if (i >= 0 && String(r[i] ?? '').trim()) return String(r[i]).trim(); } return ''; };
       const rows = [];
       for (const r of values.slice(head + 1)) {
-        const date = at(r, 'date');
-        if (!date || /^total$/i.test(date)) break;
-        const cost = at(r, 'cost');
-        rows.push({ date, depart: at(r, 'depart'), arrive: at(r, 'arrive'), cost: cost === '' ? null : Number(cost.replace(/[$,]/g, '')),
-                    length: at(r, 'length'), flight_no: at(r, 'flight'), booked: at(r, 'booked').toUpperCase() === 'TRUE', notes: at(r, 'notes') });
+        const depart = at(r, 'from');
+        if (!depart) break;
+        const cost = at(r, 'price', 'cost');
+        rows.push({ date: at(r, 'date', 'latest', 'earliest'), depart, arrive: at(r, 'to'), mode: at(r, 'mode') || 'Flight',
+                    status: at(r, 'status'), cost: cost === '' ? null : Number(cost.replace(/[$,]/g, '')),
+                    length: at(r, 'length'), flight_no: at(r, 'flight', 'service'), booked: /^booked$/i.test(at(r, 'status')), notes: at(r, 'notes') });
       }
       return rows;
     },
   });
 
-  // Flights + overland gaps + fly-instead options, with coordinates.
+  // Flights and overland legs from the Legs tab, plus fly-instead options, with coordinates.
   dash.calc('route', {
     inputs: ['my_flights', 'places'],
     title: 'Route legs',
-    description: 'Each flight from your table placed on the map; a move between two cities in the same country with no flight is a bus (train in Japan, + ferry between islands), and each one gets a fly-instead option.',
+    description: 'Each leg from the Legs tab placed on the map. Train, bus and ferry rows are overland legs (time estimated from distance); an overland leg right before a flight gets a fly-instead option; a gap between two cities in one country with no leg is assumed to be a bus.',
     fn: (my_flights, places) => {
       const YEAR = 2027;
       const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
       const clean = (t) => String(t || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/airport/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
       const find = (t) => { const c = clean(t); return places.find((p) => p.key === c) ||
         places.filter((p) => (' ' + c + ' ').includes(' ' + p.key + ' ')).sort((a, b) => b.key.length - a.key.length)[0]; };
-      const day = (s) => { const m = String(s).trim().match(/^([A-Za-z]+)\.?\s+(\d{1,2})/); if (!m) return null;
-        const mi = MONTHS.findIndex((x) => x.startsWith(m[1].toLowerCase())); return mi < 0 ? null : Date.UTC(YEAR, mi, +m[2]); };
+      const day = (s) => { const iso = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); if (iso) return Date.UTC(+iso[1], +iso[2] - 1, +iso[3]);
+        for (const m of String(s).matchAll(/([A-Za-z]{3,})\.?\s+(\d{1,2})\b/g)) {
+          const mi = MONTHS.findIndex((x) => x.startsWith(m[1].toLowerCase())); if (mi >= 0) return Date.UTC(YEAR, mi, +m[2]); }
+        return null; };
       const iso = (t) => new Date(t).toISOString().slice(0, 10);
       const when = (t) => new Date(t).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' });
       const km = (a, b) => { const r = Math.PI / 180, h = Math.sin((b.lat - a.lat) * r / 2) ** 2 +
         Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lon - a.lon) * r / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
-      const flights = my_flights.map((f, i) => ({ f, i, a: find(f.depart), b: find(f.arrive), t: day(f.date) }))
-        .filter((x) => x.a && x.b && x.t != null).sort((x, y) => x.t - y.t);
+      const overland = (a, b, mode) => { const road = km(a, b) * 1.3, ferry = (a.island || '') !== (b.island || '') || /ferry/i.test(mode);
+        const hours = /ferry/i.test(mode) && road < 60 ? 2 : road / (/train/i.test(mode) && a.country === 'Japan' ? 110 : 55) + (ferry ? 2.5 : 0);
+        return { km: Math.round(road), hours: Math.round(hours * 10) / 10 }; };
+      const legs = my_flights.map((f, i) => ({ f, i, a: find(f.depart), b: find(f.arrive), t: day(f.date), fly: /^flight$/i.test(f.mode || 'Flight') }))
+        .filter((x) => x.a && x.b && x.t != null).sort((x, y) => x.t - y.t || x.fly - y.fly);
       const out = [];
-      flights.forEach((x, n) => {
-        const prev = flights[n - 1];
-        if (prev && prev.b.name !== x.a.name && prev.b.country === x.a.country) {
-          const ferry = (prev.b.island || '') !== (x.a.island || '');
-          const mode = (x.a.country === 'Japan' ? 'Train' : 'Bus') + (ferry ? ' + ferry' : '');
-          const road = km(prev.b, x.a) * 1.3, hours = road / (x.a.country === 'Japan' ? 110 : 55) + (ferry ? 2.5 : 0);
-          out.push({ id: `g${n}`, kind: 'ground', from: prev.b.name, to: x.a.name, from_lat: prev.b.lat, from_lon: prev.b.lon,
-                     to_lat: x.a.lat, to_lon: x.a.lon, date: iso(x.t), when: `by ${when(x.t)}`, how: `${mode} · ${Math.round(hours)} hrs`,
-                     mode, km: Math.round(road), hours: Math.round(hours * 10) / 10, cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: `f${x.i}` });
-          out.push({ id: `a${n}`, kind: 'alt', from: prev.b.name, to: x.b.name, from_lat: prev.b.lat, from_lon: prev.b.lon,
-                     to_lat: x.b.lat, to_lon: x.b.lon, date: iso(x.t), when: when(x.t), how: 'Fly instead', mode: 'Flight',
-                     km: Math.round(km(prev.b, x.b)), hours: null, cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: `f${x.i}` });
+      const ground = (id, a, b, t, mode, extra) => { const o = overland(a, b, mode);
+        out.push({ id, kind: 'ground', from: a.name, to: b.name, from_lat: a.lat, from_lon: a.lon, to_lat: b.lat, to_lon: b.lon,
+                   date: iso(t), when: `by ${when(t)}`, how: `${mode} · ${Math.round(o.hours)} hrs`, mode, km: o.km, hours: o.hours,
+                   cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: '', ...extra }); };
+      legs.forEach((x, n) => {
+        const prev = legs[n - 1];
+        if (!x.fly) { ground(`f${x.i}`, x.a, x.b, x.t, x.f.mode, { cost: x.f.cost, booked: x.f.booked, notes: x.f.notes, length: x.f.length, flight_no: x.f.flight_no }); return; }
+        if (prev && prev.b.name !== x.a.name && prev.b.country === x.a.country)
+          ground(`g${n}`, prev.b, x.a, x.t, x.a.country === 'Japan' ? 'Train' : 'Bus', { notes: 'Not in the Legs tab yet: assumed overland' });
+        const before = out.filter((r) => r.kind === 'ground' && r.to === x.a.name && Math.abs(Date.parse(r.date) - x.t) <= 2 * 864e5).pop();
+        if (before && before.from !== x.b.name) {
+          const from = find(before.from); before.for_leg = `f${x.i}`;
+          out.push({ id: `a${n}`, kind: 'alt', from: from.name, to: x.b.name, from_lat: from.lat, from_lon: from.lon, to_lat: x.b.lat, to_lon: x.b.lon,
+                     date: iso(x.t), when: when(x.t), how: 'Fly instead', mode: 'Flight', km: Math.round(km(from, x.b)), hours: null,
+                     cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: `f${x.i}` });
         }
         out.push({ id: `f${x.i}`, kind: 'flight', from: x.a.name, to: x.b.name, from_lat: x.a.lat, from_lon: x.a.lon,
                    to_lat: x.b.lat, to_lon: x.b.lon, date: iso(x.t), when: when(x.t),

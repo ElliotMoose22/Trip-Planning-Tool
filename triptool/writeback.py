@@ -93,6 +93,8 @@ def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dic
         f = lr.leg.flight
         if f.source != "my table" or f.row is None or f.booked or f.date < today:
             continue
+        if c.get("cost") is None:
+            continue
         q = getattr(lr, "plan_quote", None)
         if q is not None:
             data.append({"range": cell(f.row, "cost"), "values": [[round(q.price)]]})
@@ -101,10 +103,22 @@ def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dic
             if q.flight_no and "no" in c:
                 data.append({"range": cell(f.row, "no"), "values": [[q.flight_no]]})
         data.append({"range": cell(f.row, "notes"), "values": [[row_note(lr, sigs[lr.leg.id][0])]]})
+    stamp_col = c.get("stamp", c["notes"])
     if table.title_row is not None:
-        data.append({"range": f"'{tab}'!{col_letter(c['notes'])}{table.title_row + 1}",
+        data.append({"range": f"'{tab}'!{col_letter(stamp_col)}{table.title_row + 1}",
                      "values": [[f"Last checked {today:%a %b %-d, %Y} by the trip tool"]]})
     return data
+
+
+def build_place_updates(places, tab: str = "Places") -> list[dict]:
+    """Each place's checks, written into its Notes column."""
+    if not places:
+        return []
+    rows, cols = places
+    if cols.get("notes") is None:
+        return []
+    return [{"range": f"'{tab}'!{col_letter(cols['notes'])}{pr.row + 1}", "values": [[" · ".join(pr.notes)]]}
+            for pr in rows]
 
 
 def push(sheet_url: str, data: list[dict], creds_json: str | None = None) -> int:

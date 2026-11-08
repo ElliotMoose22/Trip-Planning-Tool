@@ -35,10 +35,26 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan
         grids = download(s.sheet_url)
     else:
         sys.exit("No sheet configured. Set TRIP_SHEET_URL (or sheet.url in trip.yaml), or pass --sheet-json.")
-    cal, fl = find_tab(grids, "calendar"), find_tab(grids, "flights")
-    tab = next(t for t, g in grids.items() if g is fl)
+    names = {t.strip().lower(): t for t in grids}
+    cal = find_tab(grids, "calendar")
     days = parse_calendar(cal, today=today)
-    year = days[0].date.year if days else today.year + 1
+    year = s.start.year if s.start else (days[0].date.year if days else today.year + 1)
+
+    # Preferred: the structured Places + Legs tabs.
+    if "legs" in names:
+        from .tables import build_from_tables, parse_legs, parse_places
+        legs_parsed = parse_legs(grids[names["legs"]], year)
+        places_parsed = parse_places(grids[names["places"]], year) if "places" in names else None
+        if legs_parsed:
+            leg_rows, table = legs_parsed
+            place_rows = places_parsed[0] if places_parsed else []
+            plan = build_from_tables(place_rows, leg_rows, s.start, s.end)
+            plan.places = places_parsed
+            return plan, table, names["legs"]
+
+    # Fallback: the calendar + a flights table.
+    fl = find_tab(grids, "flights")
+    tab = next(t for t, g in grids.items() if g is fl)
 
     # Your own table wins; otherwise fall back to the first table in the tab.
     mine = parse_flight_table(fl, year, s.my_table) if s.my_table else None
@@ -97,13 +113,13 @@ def report(plan, s, store, results, source, today, out_dir):
     return write_report(s, plan, legs, stays, store, source, today, out_dir), legs
 
 
-def update_sheet(s, table, tab, legs, store, source, today) -> None:
+def update_sheet(s, plan, table, tab, legs, store, source, today) -> None:
     """Write this week's prices into your table. Real prices only, and only with Google credentials."""
     import os
     from .report import leg_signal
     from .writeback import build_updates, push
     if table is None:
-        print("Sheet update skipped: no table titled", repr(s.my_table))
+        print("Sheet update skipped: no Legs tab (or table titled", repr(s.my_table) + ")")
         return
     if source == "demo":
         print("Sheet update skipped: demo prices are never written to the sheet.")
@@ -111,9 +127,11 @@ def update_sheet(s, table, tab, legs, store, source, today) -> None:
     if not os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         print("Sheet update skipped: GOOGLE_SERVICE_ACCOUNT_JSON isn't set.")
         return
+    from .writeback import build_place_updates
     sigs = {lr.leg.id: leg_signal(lr, store, source, today) for lr in legs}
     data = build_updates(table, tab, legs, sigs, today)
-    print(f"Updated {push(s.sheet_url, data)} cells in your table.")
+    data += build_place_updates(getattr(plan, "places", None), "Places")
+    print(f"Updated {push(s.sheet_url, data)} cells in your sheet.")
 
 
 def main(argv=None):
@@ -166,7 +184,7 @@ def main(argv=None):
     path, legs = report(plan, s, store, results, provider.name, today, "reports")
     print(f"Report: {path}")
     try:
-        update_sheet(s, table, tab, legs, store, provider.name, today)
+        update_sheet(s, plan, table, tab, legs, store, provider.name, today)
     except Exception as e:   # the report is already saved; don't fail the whole run
         print(f"! Couldn't update the sheet: {e}", file=sys.stderr)
 

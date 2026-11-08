@@ -3,17 +3,6 @@
  "source": "sheet",
  "stops": [
   {
-   "name": "Manila",
-   "country": "Philippines",
-   "lat": 14.6,
-   "lon": 120.98,
-   "check_in": "2027-06-06",
-   "check_out": "2027-06-07",
-   "nights": 1,
-   "assumed": false,
-   "hotel_price": null
-  },
-  {
    "name": "Tokyo",
    "country": "Japan",
    "lat": 35.68,
@@ -58,24 +47,13 @@
    "hotel_price": null
   },
   {
-   "name": "Bangkok",
-   "country": "Thailand",
-   "lat": 13.76,
-   "lon": 100.5,
-   "check_in": "2027-06-17",
-   "check_out": "2027-06-27",
-   "nights": 10,
-   "assumed": true,
-   "hotel_price": null
-  },
-  {
    "name": "Bali",
    "country": "Indonesia",
    "lat": -8.65,
    "lon": 115.22,
    "check_in": "2027-06-27",
-   "check_out": "2027-07-05",
-   "nights": 8,
+   "check_out": "2027-07-02",
+   "nights": 5,
    "assumed": false,
    "hotel_price": null
   },
@@ -87,7 +65,7 @@
    "check_in": "2027-07-05",
    "check_out": "2027-07-12",
    "nights": 7,
-   "assumed": true,
+   "assumed": false,
    "hotel_price": null
   }
  ],
@@ -255,6 +233,22 @@
    "hours": 2.6
   },
   {
+   "from": "Fukuoka",
+   "to": "Kagoshima",
+   "from_ll": [
+    33.59,
+    130.4
+   ],
+   "to_ll": [
+    31.6,
+    130.56
+   ],
+   "by": "2027-06-13",
+   "mode": "Rental Car",
+   "km": 288,
+   "hours": 2.6
+  },
+  {
    "from": "Bangkok",
    "to": "Phuket",
    "from_ll": [
@@ -265,7 +259,7 @@
     7.88,
     98.39
    ],
-   "by": "2027-06-27",
+   "by": "2027-06-26",
    "mode": "Bus",
    "km": 901,
    "hours": 16.4
@@ -281,13 +275,28 @@
     -6.21,
     106.85
    ],
-   "by": "2027-07-05",
+   "by": "2027-07-04",
    "mode": "Bus + ferry",
    "km": 1250,
    "hours": 25.2
   }
  ],
  "alternatives": [
+  {
+   "leg": "KOJ-OKA",
+   "route": "Fukuoka \u2192 Okinawa",
+   "price": null,
+   "saves": null,
+   "kind": "calendar",
+   "from_ll": [
+    33.59,
+    130.4
+   ],
+   "to_ll": [
+    26.21,
+    127.68
+   ]
+  },
   {
    "leg": "HKT-DPS",
    "route": "Bangkok \u2192 Bali",
@@ -321,24 +330,16 @@
  ],
  "checks": [
   {
-   "level": "heads-up",
-   "text": "Jun 27: your flight leaves Phuket, but you're in Bangkok the night before \u2014 about 16 hrs by bus. Plan an overnight trip or a night in Phuket, or fly from Bangkok instead (priced below)."
+   "level": "fix",
+   "text": "Bangkok: needs a Leave date."
   },
   {
-   "level": "heads-up",
-   "text": "Jul 5: your flight leaves Jakarta, but you're in Bali the night before \u2014 about 25 hrs by bus + ferry. Plan an overnight trip or a night in Jakarta, or fly from Bali instead (priced below)."
+   "level": "fix",
+   "text": "Phuket: it's a Must, but it has no Arrive / Leave dates yet."
   },
   {
-   "level": "heads-up",
-   "text": "Jun 17\u2013Jun 27: 9 nights only say \u201cTHAILAND\u201d, so I've assumed Bangkok for hotels. Add a city to change it."
-  },
-  {
-   "level": "heads-up",
-   "text": "Jun 27\u2013Jul 5: 3 nights only say \u201cINDONESIA - Parks\u201d, so I've assumed Bali for hotels. Add a city to change it."
-  },
-  {
-   "level": "heads-up",
-   "text": "Jul 5\u2013Jul 12: 6 nights only say \u201cVIETNAM\u201d, so I've assumed Hanoi for hotels. Add a city to change it."
+   "level": "fix",
+   "text": "National parks (which?): I can't place this on the map \u2014 use a town or airport city name."
   }
  ]
 }

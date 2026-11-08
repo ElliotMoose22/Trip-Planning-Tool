@@ -86,15 +86,23 @@ class Day:
 
 
 def _month_day(text: str) -> tuple[int, int, int | None] | None:
-    text = text.strip()
+    """'June 6', 'Jun 6', 'Sun Jun 6', '2027-06-06' or an exported date ('June 6|2027') -> (month, day, year?)."""
+    text = (text or "").strip()
     year = None
     if "|" in text:
         text, y = text.split("|", 1)
         year = int(y)
+    iso = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", text)
+    if iso:
+        return int(iso.group(2)), int(iso.group(3)), int(iso.group(1))
+    text = re.sub(r"^(mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+", "", text, flags=re.I)
     m = DATE_RE.match(text)
-    if not m or m.group(1).lower() not in MONTHS:
+    if not m or len(m.group(1)) < 3:
         return None
-    return MONTHS[m.group(1).lower()], int(m.group(2)), year
+    month = next((i for name, i in MONTHS.items() if name.startswith(m.group(1).lower())), None)
+    if month is None:
+        return None
+    return month, int(m.group(2)), year
 
 
 def _at(grid: Grid, r: int, c: int) -> str:
