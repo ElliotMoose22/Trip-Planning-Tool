@@ -11,11 +11,13 @@ Instagram DM ──▶ Meta webhook ──▶ Apps Script (Code.gs) ──▶ Re
 ```
 
 ## 1. The trip Instagram account
-1. Create the account, then **Settings → Account type and tools → Switch to professional account → Creator**.
-2. **Settings → Messages and story replies → Message controls → Connected tools → Allow access to messages** (on).
+1. Create the account, then **Settings and activity → Account type and tools → Switch to professional account**
+   (Business is the safest choice for messaging; skip linking a Facebook Page).
+2. In the **phone app** (not the website): **Settings and activity → Messages and story replies → Message requests
+   → Connected tools → Allow access to messages** (on). Some app versions say *Message controls* instead of *Message requests*.
 
 ## 2. The Apps Script inbox
-1. Open the SUMMER TRIP sheet → **Extensions → Apps Script**. Replace the code with `Code.gs` from this folder.
+1. Open the SUMMER TRIP Google Sheet (the one with the Places, Legs and Reels tabs) → **Extensions → Apps Script**. Replace the code with `Code.gs` from this folder.
 2. **Project Settings → Script properties → Add**: `VERIFY_TOKEN` = any phrase (e.g. `asia-2027-reels`).
 3. Run `testAddReel` once from the editor and approve the permissions. A test row appears in Reels; delete it.
 4. **Deploy → New deployment → Web app**. Execute as: *Me*. Who has access: *Anyone*. Copy the `/exec` URL.
