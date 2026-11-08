@@ -85,7 +85,8 @@ def row_note(lr: LegResult, sig: Signal) -> str:
     return " · ".join(parts)
 
 
-def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dict, today: dt.date) -> list[dict]:
+def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dict, today: dt.date,
+                  recs: list | None = None) -> list[dict]:
     c = table.cols
     cell = lambda r, k: f"'{tab}'!{col_letter(c[k])}{r + 1}"
     data = []
@@ -102,7 +103,9 @@ def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dic
                 data.append({"range": cell(f.row, "len"), "values": [[q.duration]]})
             if q.flight_no and "no" in c:
                 data.append({"range": cell(f.row, "no"), "values": [[q.flight_no]]})
-        data.append({"range": cell(f.row, "notes"), "values": [[row_note(lr, sigs[lr.leg.id][0])]]})
+        route = f"{lr.leg.origin.name} → {lr.leg.destination.name}"
+        extra = [r.title for r in (recs or []) if route in r.legs and r.kind != "Price"]
+        data.append({"range": cell(f.row, "notes"), "values": [[" · ".join([row_note(lr, sigs[lr.leg.id][0]), *extra])]]})
     stamp_col = c.get("stamp", c["notes"])
     if table.title_row is not None:
         data.append({"range": f"'{tab}'!{col_letter(stamp_col)}{table.title_row + 1}",
@@ -110,15 +113,39 @@ def build_updates(table: FlightTable, tab: str, legs: list[LegResult], sigs: dic
     return data
 
 
-def build_place_updates(places, tab: str = "Places") -> list[dict]:
-    """Each place's checks, written into its Notes column."""
+def build_place_updates(places, tab: str = "Places", recs: list | None = None) -> list[dict]:
+    """Each place's checks and recommendations, written into its "Trip tool says" column (never your Notes)."""
     if not places:
         return []
     rows, cols = places
-    if cols.get("notes") is None:
+    if cols.get("tool") is None:
         return []
-    return [{"range": f"'{tab}'!{col_letter(cols['notes'])}{pr.row + 1}", "values": [[" · ".join(pr.notes)]]}
+    return [{"range": f"'{tab}'!{col_letter(cols['tool'])}{pr.row + 1}", "values": [[place_tool_note(pr, recs)]]}
             for pr in rows]
+
+
+def place_tool_note(pr, recs: list | None) -> str:
+    """One readable line per place: its own checks, then recommendations that touch it (no repeats)."""
+    lines = list(pr.notes)
+    has = lambda word: any(word in x for x in lines)
+    for r in recs or []:
+        if pr.city not in r.places or r.kind not in ("Dates", "Fix", "Option"):
+            continue
+        if r.kind == "Dates" and r.title.startswith(pr.city):
+            if r.legs:
+                lines.append("Suggested fix in Recommendations")
+            continue
+        if ("isn't a place" in r.title and has("can't place")) or ("has no legs" in r.title and has("No leg")):
+            continue
+        lines.append(f"Affected by: {r.title}" if r.kind == "Dates" else r.title)
+    return " · ".join(lines) or "✔ Looks good"
+
+
+def build_recs_updates(recs: list, today: dt.date, tab: str = "Recommendations", rows: int = 40) -> list[dict]:
+    """Rewrite the Recommendations tab (rows 4+)."""
+    values = [r.row(today) for r in recs][:rows]
+    values += [[""] * 6 for _ in range(rows - len(values))]
+    return [{"range": f"'{tab}'!A4:F{3 + rows}", "values": values}]
 
 
 def push(sheet_url: str, data: list[dict], creds_json: str | None = None) -> int:

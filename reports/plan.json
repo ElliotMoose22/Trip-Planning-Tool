@@ -47,6 +47,28 @@
    "hotel_price": null
   },
   {
+   "name": "Bangkok",
+   "country": "Thailand",
+   "lat": 13.76,
+   "lon": 100.5,
+   "check_in": "2027-06-17",
+   "check_out": "2027-06-21",
+   "nights": 4,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
+   "name": "Phuket",
+   "country": "Thailand",
+   "lat": 7.88,
+   "lon": 98.39,
+   "check_in": "2027-06-21",
+   "check_out": "2027-06-27",
+   "nights": 6,
+   "assumed": false,
+   "hotel_price": null
+  },
+  {
    "name": "Bali",
    "country": "Indonesia",
    "lat": -8.65,
@@ -191,12 +213,12 @@
    "suggestions": []
   },
   {
-   "id": "CGK-HAN",
-   "from": "Jakarta",
+   "id": "DPS-HAN",
+   "from": "Bali",
    "to": "Hanoi",
    "from_ll": [
-    -6.21,
-    106.85
+    -8.65,
+    115.22
    ],
    "to_ll": [
     21.03,
@@ -263,22 +285,6 @@
    "mode": "Bus",
    "km": 901,
    "hours": 16.4
-  },
-  {
-   "from": "Bali",
-   "to": "Jakarta",
-   "from_ll": [
-    -8.65,
-    115.22
-   ],
-   "to_ll": [
-    -6.21,
-    106.85
-   ],
-   "by": "2027-07-04",
-   "mode": "Bus + ferry",
-   "km": 1250,
-   "hours": 25.2
   }
  ],
  "alternatives": [
@@ -311,35 +317,137 @@
     -8.65,
     115.22
    ]
-  },
-  {
-   "leg": "CGK-HAN",
-   "route": "Bali \u2192 Hanoi",
-   "price": null,
-   "saves": null,
-   "kind": "calendar",
-   "from_ll": [
-    -8.65,
-    115.22
-   ],
-   "to_ll": [
-    21.03,
-    105.85
-   ]
   }
  ],
  "checks": [
   {
    "level": "fix",
-   "text": "Bangkok: needs a Leave date."
+   "text": "Phuket: 6 nights planned, but you want at most 5."
   },
   {
    "level": "fix",
-   "text": "Phuket: it's a Must, but it has no Arrive / Leave dates yet."
+   "text": "Misc. Nearby Places: I can't place this on the map \u2014 use a town or airport city name."
   },
   {
    "level": "fix",
-   "text": "National parks (which?): I can't place this on the map \u2014 use a town or airport city name."
+   "text": "Jakarta: needs a Leave date."
+  },
+  {
+   "level": "fix",
+   "text": "Hanoi: 7 nights planned, but you want at most 5."
+  },
+  {
+   "level": "fix",
+   "text": "No leg from Bali to Jakarta yet \u2014 add one to the Legs tab."
+  },
+  {
+   "level": "fix",
+   "text": "No leg from Jakarta to Hanoi yet \u2014 add one to the Legs tab."
+  }
+ ],
+ "recommendations": [
+  {
+   "kind": "Dates",
+   "title": "Phuket: 6 nights is over your max of 5",
+   "detail": "Take the flight Okinawa \u2192 Bangkok on Fri Jun 18 (not Jun 17); take the bus Bangkok \u2192 Phuket on Tue Jun 22 (not Jun 21). Then: Okinawa 4, Bangkok 4, Phuket 5 nights \u2014 all inside your ranges.",
+   "places": [
+    "Okinawa",
+    "Bangkok",
+    "Phuket"
+   ],
+   "legs": [
+    "Okinawa \u2192 Bangkok",
+    "Bangkok \u2192 Phuket"
+   ]
+  },
+  {
+   "kind": "Dates",
+   "title": "Hanoi: 7 nights, your range is 3\u20135",
+   "detail": "No neighbouring stop has room for 2 more nights. You meet someone there (Meet Soph Jul 5\u201310), so the simplest fix is to change the range or add a 2-night stop nearby.",
+   "places": [
+    "Hanoi"
+   ],
+   "legs": []
+  },
+  {
+   "kind": "Fix",
+   "title": "Bangkok \u2192 Phuket bus has no date",
+   "detail": "Places has you moving on Mon Jun 21. Put Jun 21 in the leg's Date column.",
+   "places": [
+    "Bangkok",
+    "Phuket"
+   ],
+   "legs": [
+    "Bangkok \u2192 Phuket"
+   ]
+  },
+  {
+   "kind": "Fix",
+   "title": "\u201cMisc. Nearby Places\u201d isn't a place the map knows",
+   "detail": "Name the town or island (for example Ubud, Nusa Penida or the Gili Islands) so it shows up on the map and its travel can be checked.",
+   "places": [
+    "Misc. Nearby Places"
+   ],
+   "legs": []
+  },
+  {
+   "kind": "Fix",
+   "title": "Jakarta has no legs in or out",
+   "detail": "If you're skipping it, delete the row in Places so the nights add up; otherwise add legs.",
+   "places": [
+    "Jakarta"
+   ],
+   "legs": []
+  },
+  {
+   "kind": "Option",
+   "title": "Pick how to get from Fukuoka to Kagoshima: train or rental car",
+   "detail": "Both are in the Legs tab as options. Mark the one you choose as Planned and delete the other.",
+   "places": [
+    "Fukuoka",
+    "Kagoshima"
+   ],
+   "legs": [
+    "Fukuoka \u2192 Kagoshima"
+   ]
+  },
+  {
+   "kind": "Option",
+   "title": "Bangkok \u2192 Phuket is about 16 hrs by bus",
+   "detail": "That's roughly 901 km. An overnight service saves a day of the trip; a short flight is the other option.",
+   "places": [
+    "Bangkok",
+    "Phuket"
+   ],
+   "legs": [
+    "Bangkok \u2192 Phuket"
+   ]
+  },
+  {
+   "kind": "Price",
+   "title": "1 flight without a price yet",
+   "detail": "The first weekly price check fills these in (needs the SerpApi key on GitHub).",
+   "places": [],
+   "legs": [
+    "Kagoshima \u2192 Okinawa"
+   ]
+  },
+  {
+   "kind": "Info",
+   "title": "Your maximum nights add up to exactly 35",
+   "detail": "Every stop at its maximum fills the trip, so there's no spare night: adding a stop means shortening another.",
+   "places": [
+    "Tokyo",
+    "Fukuoka",
+    "Kagoshima",
+    "Okinawa",
+    "Bangkok",
+    "Phuket",
+    "Bali",
+    "Misc. Nearby Places",
+    "Hanoi"
+   ],
+   "legs": []
   }
  ]
 }

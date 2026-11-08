@@ -111,7 +111,8 @@
         </table>
       </section>
       <section class="card" id="checks-card" hidden>
-        <h2>Still to sort out</h2>
+        <h2>Recommendations</h2>
+        <p class="note">From the trip tool's latest check of our sheet.</p>
         <ul class="checks" id="checks"></ul>
       </section>
     </div>
@@ -169,9 +170,13 @@
   set('k-hours', `~${Math.round(ground.reduce((s, r) => s + r.hours, 0))}`);
   set('foot', `Updated ${new Date(plan.generated + 'T12:00:00Z').toLocaleDateString('en', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })} from our trip planning sheet` +
     (live ? ' with this week’s prices.' : '. Prices shown are the ones in the sheet; live prices arrive after the first weekly price check.'));
-  const checks = (plan.checks || []).filter((c) => !/date cells are stored/.test(c.text));
-  if (checks.length) { document.getElementById('checks-card').hidden = false;
-    document.getElementById('checks').replaceChildren(...checks.map((c) => { const li = document.createElement('li'); li.textContent = c.text; return li; })); }
+  const recs = plan.recommendations && plan.recommendations.length ? plan.recommendations
+    : (plan.checks || []).filter((c) => !/date cells are stored/.test(c.text)).map((c) => ({ kind: 'Check', title: c.text, detail: '' }));
+  if (recs.length) { document.getElementById('checks-card').hidden = false;
+    document.getElementById('checks').replaceChildren(...recs.map((r) => { const li = document.createElement('li');
+      const b = document.createElement('b'); b.textContent = `${r.kind} · ${r.title}`; li.appendChild(b);
+      if (r.detail) { li.appendChild(document.createElement('br')); li.appendChild(document.createTextNode(r.detail)); }
+      return li; })); }
 
   // ---- selection ----
   let selected = null;

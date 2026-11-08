@@ -35,3 +35,23 @@ def test_tables_plan():
     assert [g.mode for g in plan.ground] == ["Bus"]
     assert places[0].notes and places[0].notes[0].startswith("4 nights planned")
     assert table.cols["cost"] == 7 and table.cols["notes"] == 11
+
+
+def test_recommendations_shift_dates_into_range():
+    from triptool.tables import recommend
+    places = [["Places"], ["hint"],
+              ["Country", "City", "Priority", "Min nights", "Max nights", "Fixed dates / must-do", "Arrive", "Leave", "Nights", "Notes (yours)", "Trip tool says (weekly)"],
+              ["Japan", "Okinawa", "Must", "2", "4", "", "Mon Jun 14", "Thu Jun 17"],
+              ["Thailand", "Bangkok", "Want", "2", "4", "", "Thu Jun 17", "Mon Jun 21"],
+              ["Thailand", "Phuket", "Must", "3", "5", "", "Mon Jun 21", "Sun Jun 27"]]
+    legs = [["Legs"], ["hint"],
+            ["From", "To", "Mode", "Earliest", "Latest", "Date", "Status", "Price (per person)", "Length", "Flight / service no.", "Booking ref", "Notes (yours)", "Trip tool says (weekly)"],
+            ["Okinawa", "Bangkok", "Flight", "", "", "Jun 17", "Planned", "$214"],
+            ["Bangkok", "Phuket", "Bus", "", "", "Jun 21", "Idea"]]
+    p, cols = parse_places(places, 2027)
+    l, table = parse_legs(legs, 2027)
+    assert cols["tool"] == 10 and table.cols["notes"] == 12      # writes go to "Trip tool says", not your Notes
+    recs = recommend(p, l, dt.date(2027, 6, 6), dt.date(2027, 7, 12))
+    phuket = next(r for r in recs if r.title.startswith("Phuket"))
+    assert "Okinawa → Bangkok on Fri Jun 18" in phuket.detail and "Bangkok → Phuket on Tue Jun 22" in phuket.detail
+    assert phuket.legs == ["Okinawa → Bangkok", "Bangkok → Phuket"]

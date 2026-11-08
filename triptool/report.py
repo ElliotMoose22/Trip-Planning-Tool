@@ -175,7 +175,12 @@ def render_html(s: Settings, plan: Plan, legs: list[LegResult], sigs: dict, stay
     fixes = [c for c in plan.checks if c.level == "fix"]
     ups = [c for c in plan.checks if c.level != "fix"]
     checks_html = ""
-    if plan.checks:
+    recs = getattr(plan, "recs", [])
+    if recs:
+        items = "".join(f'<li><span class="tag">{esc(r.kind)}</span> <b>{esc(r.title)}</b><br>'
+                        f'<span class="muted">{esc(r.detail)}</span></li>' for r in recs)
+        checks_html = f'<h2>Recommendations</h2><ul class="checks recs">{items}</ul>'
+    elif plan.checks:
         items = "".join(f'<li class="{c.level}">{esc(c.text)}</li>' for c in fixes + ups)
         checks_html = f'<h2>Things to fix in the sheet</h2><ul class="checks">{items}</ul>'
 
@@ -229,7 +234,9 @@ def render_markdown(s: Settings, plan: Plan, legs, sigs, stays, today, source) -
     out = [f"# {s.name} — weekly report {today}", ""]
     if source == "demo":
         out += ["> Demo prices — add the `SERPAPI_KEY` secret to track real ones.", ""]
-    if plan.checks:
+    if getattr(plan, "recs", []):
+        out += ["## Recommendations", *[f"- **{r.kind}** · {r.title} — {r.detail}" for r in plan.recs], ""]
+    elif plan.checks:
         out += ["## Things to fix in the sheet", *[f"- {'⚠️' if c.level == 'fix' else 'ℹ️'} {c.text}" for c in plan.checks], ""]
     out += ["## Flights (per person)", "| | Flight | Date | Now | Sheet | Best swap |", "|---|---|---|---|---|---|"]
     for lr in legs:
@@ -273,6 +280,8 @@ def plan_json(plan: Plan, legs: list[LegResult], sigs: dict, stays: list[StayRes
                     "km": round(g.km), "hours": round(g.hours, 1)} for g in plan.ground],
         "alternatives": _alternatives(legs),
         "checks": [{"level": c.level, "text": c.text} for c in plan.checks],
+        "recommendations": [{"kind": r.kind, "title": r.title, "detail": r.detail, "places": r.places, "legs": r.legs}
+                            for r in getattr(plan, "recs", [])],
     }
 
 

@@ -50,6 +50,8 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan
             place_rows = places_parsed[0] if places_parsed else []
             plan = build_from_tables(place_rows, leg_rows, s.start, s.end)
             plan.places = places_parsed
+            from .tables import recommend
+            plan.recs = recommend(place_rows, leg_rows, s.start, s.end)
             return plan, table, names["legs"]
 
     # Fallback: the calendar + a flights table.
@@ -127,10 +129,13 @@ def update_sheet(s, plan, table, tab, legs, store, source, today) -> None:
     if not os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON"):
         print("Sheet update skipped: GOOGLE_SERVICE_ACCOUNT_JSON isn't set.")
         return
-    from .writeback import build_place_updates
+    from .writeback import build_place_updates, build_recs_updates
+    recs = getattr(plan, "recs", [])
     sigs = {lr.leg.id: leg_signal(lr, store, source, today) for lr in legs}
-    data = build_updates(table, tab, legs, sigs, today)
-    data += build_place_updates(getattr(plan, "places", None), "Places")
+    data = build_updates(table, tab, legs, sigs, today, recs)
+    data += build_place_updates(getattr(plan, "places", None), "Places", recs)
+    if recs:
+        data += build_recs_updates(recs, today)
     print(f"Updated {push(s.sheet_url, data)} cells in your sheet.")
 
 
@@ -162,6 +167,9 @@ def main(argv=None):
         print("\nOn the ground:")
         for g in plan.ground:
             print(f"  by {g.by:%b %d}  {g.origin.name} → {g.destination.name}  {g.mode}  ~{g.km:,.0f} km  ~{g.hours:.0f} hrs")
+        print("\nRecommendations:")
+        for r in getattr(plan, "recs", []):
+            print(f"  [{r.kind}] {r.title}\n      {r.detail}")
         print("\nChecks:")
         for c in plan.checks:
             print(f"  [{c.level}] {c.text}")

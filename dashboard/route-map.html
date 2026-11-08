@@ -55,6 +55,22 @@
   .tg .legs tr.on td { background: color-mix(in srgb, var(--globe-flight) 16%, transparent); }
   .tg .legs tr.ground td { color: var(--color-fg-muted); }
   .tg .legs td.num, .tg .legs th.num { text-align:right; }
+  .tg .recs-card { padding-bottom: var(--cds-pad-md); }
+  .tg .recs { list-style:none; margin:0; padding:0; display:grid; gap: 6px; max-height: 420px; overflow:auto; }
+  .tg .recs li { border:1px solid var(--color-border-line); border-radius: 8px; padding: 8px 10px; cursor:pointer; }
+  .tg .recs li:hover { border-color: color-mix(in srgb, var(--color-fg) 30%, transparent); }
+  .tg .recs li:focus-visible { outline: 2px solid var(--globe-pick); outline-offset: 1px; }
+  .tg .recs li.on { border-color: var(--globe-pick); background: color-mix(in srgb, var(--globe-pick) 12%, transparent); }
+  .tg .recs .chip { display:inline-block; font-size: 10.5px; font-weight:700; letter-spacing:.04em; text-transform: uppercase; padding: 1px 7px; border-radius: 99px; margin-right: 6px; vertical-align: 1px; }
+  .tg .recs .chip.dates { background:#d1e3f7; color:#1a4c99; } .tg .recs .chip.fix { background:#fad1c7; color:#991f14; }
+  .tg .recs .chip.option { background:#ffebc7; color:#8c5905; } .tg .recs .chip.price { background:#c7ebcc; color:#146b33; }
+  .tg .recs .chip.info { background:#ebebf0; color:#4d5261; }
+  .tg .recs .t { font-weight: 600; font-size: var(--cds-font-size-body); }
+  .tg .recs .d { margin: 4px 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tg .recs .where { margin: 4px 0 0; font-size: 11px; color: var(--color-fg-muted); }
+  .tg .recs-bar { display:flex; align-items:baseline; gap: 8px; }
+  .tg .recs-bar button { margin-left:auto; all: unset; cursor:pointer; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-decoration: underline; text-underline-offset: 3px; }
+  .tg .recs-bar button[hidden] { display:none; }
   [data-dash-source-state=empty] { color: transparent; }
   [data-dash-source-state=refreshing] { opacity:.5; transition: opacity var(--cds-dur-slow); }
 </style>
@@ -96,6 +112,11 @@
     </div>
 
     <div class="side">
+      <section class="card recs-card" id="recommendations">
+        <div class="recs-bar"><h2>Recommendations</h2><button type="button" class="recs-clear" hidden>Show everything</button></div>
+        <p class="note">From the trip tool's latest check of your sheet. Click one to light up where it applies.</p>
+        <ol class="recs" data-draw="recs" data-source="recs"></ol>
+      </section>
       <section class="card detail" id="selected">
         <div data-draw="detail" data-source="route">—</div>
       </section>
@@ -193,6 +214,28 @@
     },
   });
 
+  // Recommendations tab -> one row per recommendation.
+  dash.loader('recs', {
+    description: 'Reads the Recommendations tab: one row per recommendation under its header, until the first empty row.',
+    fn: ({ answer }) => {
+      let a = answer;
+      if (a && Array.isArray(a.content)) a = a.content.map((c) => c.text || '').join('');
+      if (typeof a === 'string') a = JSON.parse(a);
+      const values = (a && a.values) || [];
+      const head = values.findIndex((r) => r.some((c) => /^type$/i.test(String(c).trim())) && r.some((c) => /^recommendation$/i.test(String(c).trim())));
+      if (head < 0) return [];
+      const h = values[head].map((c) => String(c).trim().toLowerCase());
+      const at = (r, n) => { const i = h.findIndex((x) => x.startsWith(n)); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+      const rows = [];
+      for (const [i, r] of values.slice(head + 1).entries()) {
+        const title = at(r, 'recommendation');
+        if (!title) break;
+        rows.push({ n: i + 1, type: at(r, 'type'), title, detail: at(r, 'details'), places: at(r, 'places'), legs: at(r, 'legs'), checked: at(r, 'checked') });
+      }
+      return rows;
+    },
+  });
+
   // Where you sleep: each arrival until the next departure; the trip ends July 12.
   dash.calc('stops', {
     inputs: ['route'],
@@ -233,7 +276,18 @@
     },
   });
 
-  window.tripMap = window.tripMap || { selected: null, select(id) { this.selected = id; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); } };
+  window.tripMap = window.tripMap || {
+    selected: null, focus: null,
+    select(id) { this.selected = id; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); },
+    focusOn(rec) {
+      this.focus = rec ? { n: rec.n, places: new Set(rec.places.split(',').map((s) => s.trim()).filter(Boolean)),
+                           legs: new Set(rec.legs.split(';').map((s) => s.trim()).filter(Boolean)) } : null;
+      document.querySelectorAll('.recs-clear').forEach((b) => { b.hidden = !rec; });
+      this.focusChanged = true;
+      dash.draw('recs'); dash.draw('globe'); dash.draw('legs');
+    },
+  };
+  document.querySelectorAll('.recs-clear').forEach((b) => b.addEventListener('click', () => window.tripMap.focusOn(null)));
 </script>
 
 <script>
@@ -252,6 +306,29 @@
 </script>
 
 <script>
+  // Recommendations list
+  dash.draw('recs', (ol) => {
+    const r = dash.data('recs');
+    const rows = r.status === 'ok' ? r.data : [];
+    const F = window.tripMap.focus;
+    ol.replaceChildren(...rows.map((x) => {
+      const li = document.createElement('li'); li.tabIndex = 0;
+      if (F && F.n === x.n) li.className = 'on';
+      const t = document.createElement('div'); t.className = 't';
+      const chip = document.createElement('span'); chip.className = 'chip ' + x.type.toLowerCase(); chip.textContent = x.type;
+      t.append(chip, document.createTextNode(x.title)); li.appendChild(t);
+      const d = document.createElement('p'); d.className = 'd'; d.textContent = x.detail; li.appendChild(d);
+      const where = [x.legs, x.places].filter(Boolean).join(' · ');
+      if (where) { const w = document.createElement('p'); w.className = 'where'; w.textContent = 'Applies to: ' + where; li.appendChild(w); }
+      const go = () => window.tripMap.focusOn(F && F.n === x.n ? null : x);
+      li.addEventListener('click', go); li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+      return li;
+    }));
+    if (!rows.length) ol.textContent = '—';
+  });
+</script>
+
+<script>
   // Leg list
   dash.draw('legs', (tb) => {
     const r = dash.data('route');
@@ -259,7 +336,8 @@
     tb.replaceChildren(...rows.map((x) => {
       const tr = document.createElement('tr');
       tr.dataset.key = x.id;
-      tr.className = (x.kind === 'ground' ? 'ground' : '') + (window.tripMap.selected === x.id ? ' on' : '');
+      const F = window.tripMap.focus;
+      tr.className = (x.kind === 'ground' ? 'ground' : '') + (window.tripMap.selected === x.id || (F && F.legs.has(`${x.from} → ${x.to}`)) ? ' on' : '');
       for (const [k, cls] of [['when'], ['from'], ['to'], ['how'], ['cost', 'num']]) {
         const td = document.createElement('td');
         if (cls) td.className = cls;
@@ -442,6 +520,14 @@
       st.onRoute = (st.land || []).filter((f) => st.pins.some((p) => d3.geoContains(f, [p.lon, p.lat])));
       st.lines = st.rows.map((r) => ({ row: r, pts: st.arc([r.from_lat, r.from_lon], [r.to_lat, r.to_lon], r.kind === 'ground' ? 0 : r.kind === 'alt' ? 0.8 : 1), scr: [] }));
       if (!st.fitted && st.rows.length) { st.fitted = true; st.fit(); }
+      const F = window.tripMap.focus;
+      if (F && window.tripMap.focusChanged) {
+        window.tripMap.focusChanged = false;
+        const pts = st.rows.filter((r) => F.legs.has(`${r.from} → ${r.to}`)).flatMap((r) => [[r.from_lon, r.from_lat], [r.to_lon, r.to_lat]])
+          .concat(st.pins.filter((p) => F.places.has(p.name)).map((p) => [p.lon, p.lat]));
+        if (pts.length) { const c = d3.geoCentroid({ type: 'MultiPoint', coordinates: pts }), spread = d3.max(pts, (p) => d3.geoDistance(p, c)) || 0.05;
+          st.flyTo(c[0], c[1], Math.max(1.2, Math.min(5, 0.6 / Math.sin(Math.min(1.4, spread + 0.06))))); }
+      } else if (!F) window.tripMap.focusChanged = false;
       if (window.tripMap.selected !== st.lastSel) {
         st.lastSel = window.tripMap.selected;
         const L = st.rows.find((r) => r.id === st.lastSel);
@@ -490,7 +576,8 @@
     const sel = window.tripMap.selected;
     const order = (st.lines || []).slice().sort((a, b) => (a.row.id === sel) - (b.row.id === sel) || (a.row.id === st.hover) - (b.row.id === st.hover));
     for (const L of order) {
-      const r = L.row, on = r.id === sel, hov = r.id === st.hover;
+      const r = L.row, F = window.tripMap.focus, hit = F && F.legs.has(`${r.from} → ${r.to}`), on = r.id === sel || hit, hov = r.id === st.hover;
+      const dim = F && !hit;
       L.scr = L.pts.map(([lon, lat, hh]) => { const s = st.toScreen(lon, lat, hh); s.vis = s[2] > 0 || s[3] > 1; return s; });
       if (r.kind !== 'ground') {          // faint ground shadow under each arc
         ctx.beginPath(); let pen = false;
@@ -503,7 +590,7 @@
       ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.setLineDash(r.kind === 'ground' ? [1, 5] : r.kind === 'alt' ? [6, 6] : []);
       if (on || hov) { ctx.strokeStyle = col; ctx.globalAlpha = 0.25; ctx.lineWidth = on ? 9 : 7; ctx.stroke(); ctx.globalAlpha = 1; }
-      ctx.strokeStyle = col; ctx.globalAlpha = r.kind === 'alt' && !on && !hov ? 0.55 : 1;
+      ctx.strokeStyle = col; ctx.globalAlpha = dim ? 0.22 : r.kind === 'alt' && !on && !hov ? 0.55 : 1;
       ctx.lineWidth = on ? 3 : r.kind === 'ground' ? 2.2 : 2; ctx.stroke(); ctx.globalAlpha = 1;
       if (r.kind === 'flight' && !st.reduce) {   // travelling light along each flight
         ctx.setLineDash([2, 40]); ctx.lineDashOffset = -st.dash * (on ? 1.6 : 1); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = on ? 3.4 : 2.4; ctx.stroke();
@@ -524,6 +611,11 @@
       ctx.beginPath(); ctx.arc(x, y - hgt, 4.6, 0, 2 * Math.PI);
       ctx.fillStyle = p.home ? C('--globe-booked') : p.nights ? '#ffffff' : '#9fb1c9'; ctx.fill();
       ctx.lineWidth = 1.5; ctx.strokeStyle = '#0a1120'; ctx.stroke();
+      const Fp = window.tripMap.focus;
+      if (Fp && Fp.places.has(p.name)) {
+        const pulse = st.reduce ? 0 : (Math.sin(st.dash / 6) + 1) * 2;
+        ctx.beginPath(); ctx.arc(x, y - hgt, 9 + pulse, 0, 2 * Math.PI); ctx.strokeStyle = C('--globe-pick'); ctx.lineWidth = 2; ctx.stroke();
+      }
       const label = p.name, tw = ctx.measureText(label).width;
       const hits = (lx, ly) => placed.some((q) => Math.abs(q[1] - ly) < 15 && lx < q[0] + q[2] + 6 && lx + tw > q[0] - 6);
       const spots = [[x + 8, y - hgt], [x - 8 - tw, y - hgt], [x + 8, y - hgt + 16], [x - 8 - tw, y - hgt + 16], [x + 8, y - hgt - 16]];
