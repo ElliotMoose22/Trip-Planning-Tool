@@ -1,0 +1,528 @@
+<meta name="dash-one-writer">
+<style>
+  /* Plan: the map is a dark world of its own (navy ocean, slate land, hairline borders); the rest follows the dashboard theme.
+     Layout: header + four tiles, then globe (wide) beside the selected leg and the leg list. */
+  .tg { --globe-ocean:#0a1120; --globe-land:#18212f; --globe-land-hot:#223047; --globe-edge:rgba(170,190,220,.22);
+        --globe-flight:#ffb36b; --globe-booked:#7fb2ff; --globe-alt:#7fd8ff; --globe-ground:#9fb1c9; --globe-pick:#ffe08a;
+        font-family: var(--font-anthropic-sans); display:grid; gap: var(--cds-gap-lg); }
+  .tg h1 { font-family: var(--font-anthropic-serif); font-weight:400; font-size: var(--cds-font-size-title); margin:0; text-wrap:balance; }
+  .tg .lede { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); max-width: 70ch; }
+  .tg .lede b { color: var(--color-fg); font-weight: 600; }
+  .tg .tiles { display:grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--cds-gap-md); }
+  .tg .tile { background: var(--color-panel); border:1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); }
+  .tg .tile span { display:block; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tg .tile b { display:block; font-family: var(--font-anthropic-serif); font-weight:400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; margin-top: var(--cds-gap-xs); }
+  .tg .main { display:grid; grid-template-columns: minmax(0, 1.9fr) minmax(min(100%, 19rem), 1fr); gap: var(--cds-gap-md); align-items: start; }
+  @media (max-width: 860px) { .tg .main { grid-template-columns: 1fr; } }
+  .tg .globe-card { position:relative; background: var(--globe-ocean); border-radius: var(--cds-radius); overflow:hidden; border:1px solid #1d2840; color:#dfe7f3; }
+  .tg .globe { position:relative; min-height: 420px; touch-action: none; }
+  .tg .globe canvas { display:block; cursor: grab; }
+  .tg .globe canvas.dragging { cursor: grabbing; }
+  .tg .globe canvas.over { cursor: pointer; }
+  .tg .globe-bar { position:absolute; left: var(--cds-pad-md); right: var(--cds-pad-md); top: var(--cds-pad-md); display:flex; gap: var(--cds-gap-sm); align-items:center; pointer-events:none; }
+  .tg .globe-bar .hint { font-size: var(--cds-font-size-caption); color:#8e9bb3; }
+  .tg .globe-bar .btns { margin-left:auto; display:flex; gap: var(--cds-gap-xs); pointer-events:auto; }
+  .tg .globe-bar button { background: rgba(20,30,48,.85); color:#dfe7f3; border:1px solid #2b3a57; border-radius: 8px; height: 30px; min-width: 30px; padding: 0 10px; font: inherit; font-size: var(--cds-font-size-caption); cursor:pointer; }
+  .tg .globe-bar button:hover { border-color:#4a6290; }
+  .tg .globe-bar button:focus-visible { outline: 2px solid var(--globe-pick); outline-offset: 1px; }
+  .tg .legend { position:absolute; left: var(--cds-pad-md); bottom: var(--cds-pad-md); display:flex; flex-wrap:wrap; gap: var(--cds-gap-md); font-size: var(--cds-font-size-caption); color:#a9b5ca; pointer-events:none; }
+  .tg .legend i { display:inline-block; width:18px; height:0; border-top:2px solid; vertical-align: middle; margin-right:6px; }
+  .tg .legend .lf i { border-color: var(--globe-flight); } .tg .legend .lb i { border-color: var(--globe-booked); }
+  .tg .legend .la i { border-top-style: dashed; border-color: var(--globe-alt); } .tg .legend .lg i { border-top-style: dotted; border-color: var(--globe-ground); }
+  .tg .tip { position:absolute; pointer-events:none; background: rgba(12,18,30,.94); border:1px solid #2b3a57; border-radius: 8px; padding: 6px 10px; font-size: var(--cds-font-size-caption); color:#dfe7f3; white-space:nowrap; transform: translate(-50%, calc(-100% - 12px)); }
+  .tg .tip em { font-style:normal; color:#8e9bb3; display:block; }
+  .tg .side { display:grid; gap: var(--cds-gap-md); }
+  .tg .card { background: var(--color-panel); border:1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); }
+  .tg .card h2 { font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); margin:0 0 var(--cds-gap-xs); }
+  .tg .card .note { margin:0 0 var(--cds-gap-md); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tg .detail { min-height: 190px; }
+  .tg .detail .kicker { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); text-transform: uppercase; letter-spacing: .06em; }
+  .tg .detail .route { font-family: var(--font-anthropic-serif); font-size: var(--cds-font-size-title); line-height:1.15; margin: 4px 0 2px; }
+  .tg .detail dl { display:grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: var(--cds-gap-md) 0 0; font-size: var(--cds-font-size-body); }
+  .tg .detail dt { color: var(--color-fg-muted); } .tg .detail dd { margin:0; font-variant-numeric: tabular-nums; }
+  .tg .detail .pill { display:inline-block; font-size: 11px; font-weight:700; letter-spacing:.05em; padding: 2px 8px; border-radius: 99px; background: var(--color-border-line); }
+  .tg .detail .pill.buy { background: color-mix(in srgb, var(--color-ok) 18%, transparent); color: var(--color-ok); }
+  .tg .detail .pill.booked { background: color-mix(in srgb, #3a5bd9 18%, transparent); color: #6f8ff0; }
+  .tg .detail .notes { margin: var(--cds-gap-md) 0 0; padding: var(--cds-pad-sm) var(--cds-pad-md); border-left: 3px solid var(--color-border-line); color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .tg .detail .alts { margin: var(--cds-gap-md) 0 0; padding:0; list-style:none; font-size: var(--cds-font-size-caption); }
+  .tg .detail .alts li { padding: 4px 0; }
+  .tg .detail .alts button { all: unset; cursor:pointer; color: var(--color-fg); text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+  .tg .legs { width:100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .tg .legs th { text-align:left; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: 0 6px 6px; border-bottom:1px solid var(--color-border-line); }
+  .tg .legs td { padding: 7px 6px; border-bottom:1px solid var(--color-border-line); }
+  .tg .legs tr { cursor:pointer; }
+  .tg .legs tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 5%, transparent); }
+  .tg .legs tr.on td { background: color-mix(in srgb, var(--globe-flight) 16%, transparent); }
+  .tg .legs tr.ground td { color: var(--color-fg-muted); }
+  .tg .legs td.num, .tg .legs th.num { text-align:right; }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity:.5; transition: opacity var(--cds-dur-slow); }
+</style>
+
+<div class="tg">
+  <header>
+    <h1>Asia 2027 · route map</h1>
+    <p class="lede"><b data-draw="t-flights" data-source="summary" data-field="flights">—</b> flights and
+      <b data-draw="t-ground" data-source="summary" data-field="overland_legs">—</b> overland legs from
+      <b data-draw="t-first" data-source="summary" data-field="first">—</b> to
+      <b data-draw="t-last" data-source="summary" data-field="last">—</b>, read live from your flights table.
+      Drag to spin, scroll or pinch to zoom, click a path or a pin.</p>
+  </header>
+
+  <div class="tiles">
+    <div class="tile"><span>Flights in your table</span><b data-draw="k-total" data-source="summary" data-field="table_total">—</b></div>
+    <div class="tile"><span>Flights booked</span><b data-draw="k-booked" data-source="summary" data-field="booked">—</b></div>
+    <div class="tile"><span>Waiting on a price</span><b data-draw="k-unpriced" data-source="summary" data-field="unpriced">—</b></div>
+    <div class="tile"><span>Est. hours on buses and trains</span><b data-draw="k-hours" data-source="summary" data-field="overland_hours">—</b></div>
+  </div>
+
+  <div class="main">
+    <div class="globe-card">
+      <div class="globe" id="globe" data-draw="globe" data-source="route stops countries"></div>
+      <div class="globe-bar">
+        <span class="hint">Your route, June 6 – July 12</span>
+        <div class="btns">
+          <button type="button" class="g-zoom-in" aria-label="Zoom in">+</button>
+          <button type="button" class="g-zoom-out" aria-label="Zoom out">−</button>
+          <button type="button" class="g-fit">Fit route</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span class="lf"><i></i>Flight to book</span>
+        <span class="lb"><i></i>Booked</span>
+        <span class="lg"><i></i>Bus / train</span>
+        <span class="la"><i></i>Could fly instead</span>
+      </div>
+    </div>
+
+    <div class="side">
+      <section class="card detail" id="selected">
+        <div data-draw="detail" data-source="route">—</div>
+      </section>
+      <section class="card" id="legs">
+        <h2>Every leg</h2>
+        <p class="note">Flights come from your table in the sheet; overland legs fill the gaps between them.</p>
+        <table class="legs" data-source="route" data-row-key="id">
+          <thead><tr>
+            <th data-field="when">Date</th>
+            <th data-field="from">From</th>
+            <th data-field="to">To</th>
+            <th data-field="how">How</th>
+            <th data-field="cost" class="num">Cost</th>
+          </tr></thead>
+          <tbody data-draw="legs"></tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Sheet rows -> one row per flight in "Elliot Flights", stopping at Total or a blank row.
+  dash.loader('my_flights', {
+    description: 'Finds the "Elliot Flights" table in the flights tab and returns one row per flight under its header, up to the Total row.',
+    fn: ({ answer }) => {
+      let a = answer;
+      if (a && Array.isArray(a.content)) a = a.content.map((c) => c.text || '').join('');
+      if (typeof a === 'string') a = JSON.parse(a);
+      const values = (a && a.values) || [];
+      const title = values.findIndex((r) => r.some((c) => /elliot flights/i.test(String(c))));
+      const head = values.findIndex((r, i) => i > title && r.some((c) => /^date$/i.test(String(c).trim())));
+      if (title < 0 || head < 0) return [];
+      const h = values[head].map((c) => String(c).trim().toLowerCase());
+      const at = (r, name) => { const i = h.findIndex((x) => x.startsWith(name)); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+      const rows = [];
+      for (const r of values.slice(head + 1)) {
+        const date = at(r, 'date');
+        if (!date || /^total$/i.test(date)) break;
+        const cost = at(r, 'cost');
+        rows.push({ date, depart: at(r, 'depart'), arrive: at(r, 'arrive'), cost: cost === '' ? null : Number(cost.replace(/[$,]/g, '')),
+                    length: at(r, 'length'), flight_no: at(r, 'flight'), booked: at(r, 'booked').toUpperCase() === 'TRUE', notes: at(r, 'notes') });
+      }
+      return rows;
+    },
+  });
+
+  // Flights + overland gaps + fly-instead options, with coordinates.
+  dash.calc('route', {
+    inputs: ['my_flights', 'places'],
+    title: 'Route legs',
+    description: 'Each flight from your table placed on the map; a move between two cities in the same country with no flight is a bus (train in Japan, + ferry between islands), and each one gets a fly-instead option.',
+    fn: (my_flights, places) => {
+      const YEAR = 2027;
+      const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+      const clean = (t) => String(t || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/airport/g, ' ').replace(/[^a-z ]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const find = (t) => { const c = clean(t); return places.find((p) => p.key === c) ||
+        places.filter((p) => (' ' + c + ' ').includes(' ' + p.key + ' ')).sort((a, b) => b.key.length - a.key.length)[0]; };
+      const day = (s) => { const m = String(s).trim().match(/^([A-Za-z]+)\.?\s+(\d{1,2})/); if (!m) return null;
+        const mi = MONTHS.findIndex((x) => x.startsWith(m[1].toLowerCase())); return mi < 0 ? null : Date.UTC(YEAR, mi, +m[2]); };
+      const iso = (t) => new Date(t).toISOString().slice(0, 10);
+      const when = (t) => new Date(t).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      const km = (a, b) => { const r = Math.PI / 180, h = Math.sin((b.lat - a.lat) * r / 2) ** 2 +
+        Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin((b.lon - a.lon) * r / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
+      const flights = my_flights.map((f, i) => ({ f, i, a: find(f.depart), b: find(f.arrive), t: day(f.date) }))
+        .filter((x) => x.a && x.b && x.t != null).sort((x, y) => x.t - y.t);
+      const out = [];
+      flights.forEach((x, n) => {
+        const prev = flights[n - 1];
+        if (prev && prev.b.name !== x.a.name && prev.b.country === x.a.country) {
+          const ferry = (prev.b.island || '') !== (x.a.island || '');
+          const mode = (x.a.country === 'Japan' ? 'Train' : 'Bus') + (ferry ? ' + ferry' : '');
+          const road = km(prev.b, x.a) * 1.3, hours = road / (x.a.country === 'Japan' ? 110 : 55) + (ferry ? 2.5 : 0);
+          out.push({ id: `g${n}`, kind: 'ground', from: prev.b.name, to: x.a.name, from_lat: prev.b.lat, from_lon: prev.b.lon,
+                     to_lat: x.a.lat, to_lon: x.a.lon, date: iso(x.t), when: `by ${when(x.t)}`, how: `${mode} · ${Math.round(hours)} hrs`,
+                     mode, km: Math.round(road), hours: Math.round(hours * 10) / 10, cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: `f${x.i}` });
+          out.push({ id: `a${n}`, kind: 'alt', from: prev.b.name, to: x.b.name, from_lat: prev.b.lat, from_lon: prev.b.lon,
+                     to_lat: x.b.lat, to_lon: x.b.lon, date: iso(x.t), when: when(x.t), how: 'Fly instead', mode: 'Flight',
+                     km: Math.round(km(prev.b, x.b)), hours: null, cost: null, booked: false, notes: '', flight_no: '', length: '', for_leg: `f${x.i}` });
+        }
+        out.push({ id: `f${x.i}`, kind: 'flight', from: x.a.name, to: x.b.name, from_lat: x.a.lat, from_lon: x.a.lon,
+                   to_lat: x.b.lat, to_lon: x.b.lon, date: iso(x.t), when: when(x.t),
+                   how: x.f.flight_no ? `Flight ${x.f.flight_no}` : 'Flight', mode: 'Flight', km: Math.round(km(x.a, x.b)),
+                   hours: null, cost: x.f.cost, booked: x.f.booked, notes: x.f.notes, flight_no: x.f.flight_no, length: x.f.length, for_leg: '' });
+      });
+      return out;
+    },
+  });
+
+  // Where you sleep: each arrival until the next departure; the trip ends July 12.
+  dash.calc('stops', {
+    inputs: ['route'],
+    title: 'Stops',
+    description: 'Each city you arrive in, from that day until you leave it; the last stop runs to July 12.',
+    fn: (route) => {
+      const END = '2027-07-12';
+      const legs = route.filter((r) => r.kind !== 'alt');
+      const nights = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+      const out = [];
+      if (legs.length) out.push({ name: legs[0].from, lat: legs[0].from_lat, lon: legs[0].from_lon, arrive: null, leave: legs[0].date, nights: null, home: true });
+      legs.forEach((l, i) => {
+        const leave = legs[i + 1] ? legs[i + 1].date : END;
+        const same = out.find((s) => s.name === l.to && !s.home);
+        if (same && same.leave === l.date) { same.leave = leave; same.nights = nights(same.arrive, leave); return; }
+        out.push({ name: l.to, lat: l.to_lat, lon: l.to_lon, arrive: l.date, leave, nights: nights(l.date, leave), home: false });
+      });
+      route.filter((r) => r.kind === 'alt').forEach((r) => {
+        if (!out.some((s) => s.name === r.from)) out.push({ name: r.from, lat: r.from_lat, lon: r.from_lon, arrive: null, leave: null, nights: null, home: false });
+      });
+      return out;
+    },
+  });
+
+  dash.calc('summary', {
+    inputs: ['route'],
+    title: 'Trip totals',
+    description: 'Counts and totals over the legs: flights, booked flights, flights still without a price, the sum of the Cost column, and estimated hours overland.',
+    fn: (route) => {
+      const f = route.filter((r) => r.kind === 'flight'), g = route.filter((r) => r.kind === 'ground');
+      const when = (d) => new Date(d).toLocaleDateString('en', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+      return [{
+        flights: f.length, booked: f.filter((r) => r.booked).length, unpriced: f.filter((r) => r.cost == null).length,
+        table_total: f.reduce((s, r) => s + (r.cost || 0), 0), overland_legs: g.length,
+        overland_hours: Math.round(g.reduce((s, r) => s + r.hours, 0)),
+        first: f.length ? when(f[0].date) : null, last: when('2027-07-12'),
+      }];
+    },
+  });
+
+  window.tripMap = window.tripMap || { selected: null, select(id) { this.selected = id; dash.draw('globe'); dash.draw('detail'); dash.draw('legs'); } };
+</script>
+
+<script>
+  // Headline numbers
+  const S = () => { const s = dash.data('summary'); return s.status === 'ok' && s.data[0] ? s.data[0] : null; };
+  const money = (v) => v == null ? '—' : '$' + d3.format(',')(Math.round(v));
+  const put = (name, f) => dash.draw(name, (el) => { const s = S(); el.textContent = s ? f(s) : '—'; });
+  put('t-flights', (s) => s.flights);
+  put('t-ground', (s) => s.overland_legs);
+  put('t-first', (s) => s.first);
+  put('t-last', (s) => s.last);
+  put('k-total', (s) => money(s.table_total));
+  put('k-booked', (s) => s.booked);
+  put('k-unpriced', (s) => s.unpriced);
+  put('k-hours', (s) => s.overland_hours);
+</script>
+
+<script>
+  // Leg list
+  dash.draw('legs', (tb) => {
+    const r = dash.data('route');
+    const rows = r.status === 'ok' ? r.data.filter((x) => x.kind !== 'alt') : [];
+    tb.replaceChildren(...rows.map((x) => {
+      const tr = document.createElement('tr');
+      tr.dataset.key = x.id;
+      tr.className = (x.kind === 'ground' ? 'ground' : '') + (window.tripMap.selected === x.id ? ' on' : '');
+      for (const [k, cls] of [['when'], ['from'], ['to'], ['how'], ['cost', 'num']]) {
+        const td = document.createElement('td');
+        if (cls) td.className = cls;
+        td.textContent = k === 'cost' ? (x.cost == null ? (x.kind === 'flight' ? '…' : '') : '$' + d3.format(',')(x.cost)) : x[k];
+        tr.appendChild(td);
+      }
+      tr.addEventListener('click', () => window.tripMap.select(x.id));
+      return tr;
+    }));
+  });
+</script>
+
+<script>
+  // Selected leg
+  dash.draw('detail', (el) => {
+    const r = dash.data('route');
+    el.replaceChildren();
+    if (r.status !== 'ok' || !r.data.length) { el.textContent = '—'; return; }
+    const rows = r.data;
+    const pick = rows.find((x) => x.id === window.tripMap.selected) || rows.find((x) => x.kind === 'flight' && !x.booked) || rows[0];
+    const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
+    const kind = pick.kind === 'ground' ? 'Overland' : pick.kind === 'alt' ? 'Option' : 'Flight';
+    add('div', 'kicker', `${kind} · ${pick.when}`);
+    add('div', 'route', `${pick.from} → ${pick.to}`);
+    if (pick.kind === 'flight') {
+      const v = (pick.notes.match(/^(BUY|WATCH|WAIT)\b/) || [])[1];
+      add('span', 'pill ' + (pick.booked ? 'booked' : v === 'BUY' ? 'buy' : ''), pick.booked ? 'BOOKED' : (v || 'TRACKING'));
+    }
+    const dl = add('dl');
+    const row = (k, v) => { if (v == null || v === '') return; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
+    if (pick.kind === 'flight') {
+      row('Cost', pick.cost == null ? 'price fills in on Sunday' : `$${d3.format(',')(pick.cost)} per person`);
+      row('Flight', pick.flight_no); row('Length', pick.length); row('Distance', `${d3.format(',')(pick.km)} km`);
+    } else if (pick.kind === 'ground') {
+      row('How', pick.mode); row('Time', `about ${Math.round(pick.hours)} hrs`); row('Distance', `about ${d3.format(',')(pick.km)} km by road`);
+    } else {
+      row('Instead of', 'the overland trip and the flight after it'); row('Distance', `${d3.format(',')(pick.km)} km`);
+      row('Price', 'the weekly report prices this option');
+    }
+    if (pick.notes) add('p', 'notes', pick.notes);
+    const related = rows.filter((x) => x.id !== pick.id && (x.for_leg === pick.id || (pick.for_leg && (x.for_leg === pick.for_leg || x.id === pick.for_leg))));
+    if (related.length) {
+      const ul = add('ul', 'alts');
+      related.forEach((x) => {
+        const li = document.createElement('li'); const b = document.createElement('button'); b.type = 'button';
+        b.textContent = `${x.kind === 'alt' ? 'Could fly' : x.kind === 'ground' ? 'Overland' : 'Flight'}: ${x.from} → ${x.to}`;
+        b.addEventListener('click', () => window.tripMap.select(x.id)); li.appendChild(b); ul.appendChild(li);
+      });
+    }
+  });
+</script>
+
+<script>
+  // The globe: orthographic sphere on a canvas, arcs lifted off the surface in 3D.
+  dash.draw('globe', {
+    mount(el) {
+      const st = { rot: [-112, -18, 0], k: 1, hover: null, raf: 0, dash: 0, el };
+      const canvas = document.createElement('canvas');
+      const tip = document.createElement('div'); tip.className = 'tip'; tip.hidden = true;
+      el.append(canvas, tip);
+      st.canvas = canvas; st.tip = tip; st.ctx = canvas.getContext('2d');
+      st.reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const rad = Math.PI / 180;
+      const toScreen = (lon, lat, h) => {          // 3D point at altitude h (fraction of radius) -> screen, with depth
+        const [l, p] = d3.geoRotation(st.rot)([lon, lat]);
+        const cp = Math.cos(p * rad), x = cp * Math.sin(l * rad), y = Math.sin(p * rad), z = cp * Math.cos(l * rad);
+        const R = st.R * (1 + h);
+        return [st.cx + R * x, st.cy - R * y, z * (1 + h), Math.hypot(x, y) * (1 + h)];
+      };
+      st.toScreen = toScreen;
+      st.arc = (a, b, lift) => {                   // great circle between a and b, raised in the middle
+        const ip = d3.geoInterpolate([a[1], a[0]], [b[1], b[0]]);
+        const ang = d3.geoDistance([a[1], a[0]], [b[1], b[0]]);
+        const H = lift * (0.07 + 0.42 * ang / Math.PI);
+        const n = Math.max(24, Math.round(ang * 90));
+        return d3.range(n + 1).map((i) => { const t = i / n, [lon, lat] = ip(t); return [lon, lat, H * Math.sin(Math.PI * t)]; });
+      };
+
+      const zoom = d3.zoom().scaleExtent([0.8, 9]).filter((e) => !e.button)
+        .on('start', () => canvas.classList.add('dragging'))
+        .on('zoom', (e) => {
+          const se = e.sourceEvent;
+          if (se && (se.type === 'mousemove' || se.type === 'touchmove' || se.type === 'pointermove') && st.last) {
+            const f = 0.25 / st.k;
+            st.rot = [st.rot[0] + (e.transform.x - st.last.x) * f, Math.max(-85, Math.min(85, st.rot[1] - (e.transform.y - st.last.y) * f)), 0];
+          }
+          st.k = e.transform.k; st.last = e.transform; st.paint();
+        })
+        .on('end', () => canvas.classList.remove('dragging'));
+      st.zoom = zoom;
+      d3.select(canvas).call(zoom).on('dblclick.zoom', null);
+      st.last = d3.zoomIdentity;
+
+      const pickAt = (mx, my) => {
+        let best = null, bd = 10;
+        for (const p of st.pins || []) {
+          const s = toScreen(p.lon, p.lat, 0); if (s[2] <= 0) continue;
+          const d = Math.hypot(s[0] - mx, s[1] - (my + 8)); if (d < bd) { bd = d; best = { pin: p }; }
+        }
+        if (best) return best;
+        for (const L of st.lines || []) {
+          for (let i = 1; i < L.pts.length; i++) {
+            const a = L.scr[i - 1], b = L.scr[i]; if (!a.vis || !b.vis) continue;
+            const dx = b[0] - a[0], dy = b[1] - a[1], t = Math.max(0, Math.min(1, ((mx - a[0]) * dx + (my - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+            const d = Math.hypot(a[0] + t * dx - mx, a[1] + t * dy - my);
+            if (d < bd) { bd = d; best = { leg: L.row }; }
+          }
+        }
+        return best;
+      };
+      canvas.addEventListener('mousemove', (e) => {
+        const r = canvas.getBoundingClientRect(), hit = pickAt(e.clientX - r.left, e.clientY - r.top);
+        st.hover = hit && hit.leg ? hit.leg.id : null;
+        canvas.classList.toggle('over', !!hit);
+        if (hit) {
+          tip.hidden = false; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`;
+          if (hit.leg) { const L = hit.leg; tip.replaceChildren(document.createTextNode(`${L.from} → ${L.to}`));
+            const em = document.createElement('em'); em.textContent = `${L.when} · ${L.kind === 'flight' ? (L.cost == null ? 'no price yet' : '$' + d3.format(',')(L.cost)) : L.how}`; tip.appendChild(em); }
+          else { const P = hit.pin; tip.replaceChildren(document.createTextNode(P.name));
+            const em = document.createElement('em'); em.textContent = P.home ? 'Start' : P.nights ? `${P.nights} night${P.nights > 1 ? 's' : ''}` : 'Passing through'; tip.appendChild(em); }
+        } else tip.hidden = true;
+        if (st.reduce) st.paint();
+      });
+      canvas.addEventListener('mouseleave', () => { st.hover = null; tip.hidden = true; canvas.classList.remove('over'); st.paint(); });
+      canvas.addEventListener('click', (e) => {
+        const r = canvas.getBoundingClientRect(), hit = pickAt(e.clientX - r.left, e.clientY - r.top);
+        if (!hit) return;
+        if (hit.leg) window.tripMap.select(hit.leg.id);
+        else { const L = (st.rows || []).find((x) => x.kind !== 'alt' && x.to === hit.pin.name) || (st.rows || []).find((x) => x.from === hit.pin.name);
+          if (L) window.tripMap.select(L.id); }
+      });
+
+      st.flyTo = (lon, lat, k) => {
+        const from = st.rot.slice(), to = [-lon, -lat, 0], k0 = st.k, k1 = k || st.k;
+        if (st.reduce) { st.rot = to; st.setK(k1); return; }
+        const ip = d3.interpolate(from, to), t0 = performance.now();
+        const step = (now) => { const t = Math.min(1, (now - t0) / 900), e = d3.easeCubicInOut(t);
+          st.rot = ip(e); st.setK(k0 + (k1 - k0) * e); if (t < 1) requestAnimationFrame(step); };
+        requestAnimationFrame(step);
+      };
+      st.setK = (k) => { d3.select(canvas).call(zoom.scaleTo, k); st.paint(); };
+      st.fit = () => {
+        const pts = (st.rows || []).filter((r) => r.kind !== 'alt').flatMap((r) => [[r.from_lon, r.from_lat], [r.to_lon, r.to_lat]]);
+        const asia = pts.filter((p) => p[0] > 60);           // frame the Asian part; Toronto sits on the far side
+        if (!asia.length) return;
+        const c = d3.geoCentroid({ type: 'MultiPoint', coordinates: asia });
+        const spread = d3.max(asia, (p) => d3.geoDistance(p, c));
+        st.flyTo(c[0], c[1], Math.max(1, Math.min(4, 0.9 / Math.sin(Math.min(1.4, spread + 0.15)))));
+      };
+      el.closest('.globe-card').querySelectorAll('.g-zoom-in').forEach((b) => b.addEventListener('click', () => st.setK(Math.min(9, st.k * 1.5))));
+      el.closest('.globe-card').querySelectorAll('.g-zoom-out').forEach((b) => b.addEventListener('click', () => st.setK(Math.max(0.8, st.k / 1.5))));
+      el.closest('.globe-card').querySelectorAll('.g-fit').forEach((b) => b.addEventListener('click', () => st.fit()));
+
+      st.paint = () => paint(st);
+      const loop = () => { st.dash = (st.dash + 0.6) % 1000; st.paint(); st.raf = requestAnimationFrame(loop); };
+      if (!st.reduce) st.raf = requestAnimationFrame(loop);
+      return st;
+    },
+    update(el, st) {
+      const route = dash.data('route'), stops = dash.data('stops'), world = dash.data('countries');
+      const w = el.clientWidth || 600, h = Math.round(Math.max(420, Math.min(640, w * 0.72)));
+      const dpr = window.devicePixelRatio || 1;
+      st.w = w; st.h = h; st.canvas.width = w * dpr; st.canvas.height = h * dpr;
+      st.canvas.style.width = `${w}px`; st.canvas.style.height = `${h}px`; el.style.minHeight = `${h}px`;
+      st.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (world.status === 'ok' && st.worldRaw !== world.data) {
+        st.worldRaw = world.data;
+        st.land = (world.data.features || []).map((f) => {
+          const g = f.geometry; if (!g) return null;
+          const fix = (rings) => rings.map((r) => r.slice().reverse());
+          const ff = { type: 'Feature', properties: f.properties, geometry: g };
+          if (d3.geoArea(ff) > 2 * Math.PI) ff.geometry = g.type === 'Polygon' ? { type: 'Polygon', coordinates: fix(g.coordinates) }
+            : { type: 'MultiPolygon', coordinates: g.coordinates.map(fix) };
+          return ff;
+        }).filter(Boolean);
+      }
+      st.rows = route.status === 'ok' ? route.data : [];
+      st.pins = stops.status === 'ok' ? stops.data : [];
+      st.onRoute = (st.land || []).filter((f) => st.pins.some((p) => d3.geoContains(f, [p.lon, p.lat])));
+      st.lines = st.rows.map((r) => ({ row: r, pts: st.arc([r.from_lat, r.from_lon], [r.to_lat, r.to_lon], r.kind === 'ground' ? 0 : r.kind === 'alt' ? 0.8 : 1), scr: [] }));
+      if (!st.fitted && st.rows.length) { st.fitted = true; st.fit(); }
+      if (window.tripMap.selected !== st.lastSel) {
+        st.lastSel = window.tripMap.selected;
+        const L = st.rows.find((r) => r.id === st.lastSel);
+        if (L) { const m = d3.geoInterpolate([L.from_lon, L.from_lat], [L.to_lon, L.to_lat])(0.5); st.flyTo(m[0], m[1], Math.max(st.k, L.km > 4000 ? 1.4 : 2.6)); }
+      }
+      st.paint();
+      return st;
+    },
+    unmount(el, st) { cancelAnimationFrame(st.raf); el.replaceChildren(); },
+  });
+
+  function paint(st) {
+    const { ctx, w, h } = st; if (!w) return;
+    const cs = getComputedStyle(st.el);
+    const C = (n) => cs.getPropertyValue(n).trim();
+    st.cx = w / 2; st.cy = h / 2 + 12; st.R = Math.min(w, h) * 0.42 * st.k;
+    const proj = d3.geoOrthographic().rotate(st.rot).translate([st.cx, st.cy]).scale(st.R).clipAngle(90).precision(0.4);
+    const path = d3.geoPath(proj, ctx);
+    ctx.clearRect(0, 0, w, h);
+
+    // glow + ocean
+    const g = ctx.createRadialGradient(st.cx, st.cy, st.R * 0.9, st.cx, st.cy, st.R * 1.18);
+    g.addColorStop(0, 'rgba(90,140,220,.22)'); g.addColorStop(1, 'rgba(90,140,220,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(st.cx, st.cy, st.R * 1.18, 0, 2 * Math.PI); ctx.fill();
+    const o = ctx.createRadialGradient(st.cx - st.R * 0.35, st.cy - st.R * 0.4, st.R * 0.1, st.cx, st.cy, st.R);
+    o.addColorStop(0, '#13213a'); o.addColorStop(1, '#070d19');
+    ctx.fillStyle = o; ctx.beginPath(); path({ type: 'Sphere' }); ctx.fill();
+
+    // graticule
+    ctx.strokeStyle = 'rgba(140,170,220,.07)'; ctx.lineWidth = 0.6; ctx.beginPath(); path(d3.geoGraticule10()); ctx.stroke();
+
+    // countries
+    for (const f of st.land || []) {
+      ctx.beginPath(); path(f);
+      ctx.fillStyle = C('--globe-land'); ctx.fill();
+    }
+    ctx.strokeStyle = C('--globe-edge'); ctx.lineWidth = 0.6;
+    for (const f of st.land || []) { ctx.beginPath(); path(f); ctx.stroke(); }
+    // countries on the route, slightly lighter
+    for (const f of st.onRoute || []) { ctx.beginPath(); path(f); ctx.fillStyle = C('--globe-land-hot'); ctx.fill(); ctx.strokeStyle = 'rgba(190,210,240,.35)'; ctx.stroke(); }
+
+    // rim light
+    ctx.strokeStyle = 'rgba(140,180,255,.25)'; ctx.lineWidth = 1; ctx.beginPath(); path({ type: 'Sphere' }); ctx.stroke();
+
+    // paths: shadow on the surface, then the lifted arc
+    const sel = window.tripMap.selected;
+    const order = (st.lines || []).slice().sort((a, b) => (a.row.id === sel) - (b.row.id === sel) || (a.row.id === st.hover) - (b.row.id === st.hover));
+    for (const L of order) {
+      const r = L.row, on = r.id === sel, hov = r.id === st.hover;
+      L.scr = L.pts.map(([lon, lat, hh]) => { const s = st.toScreen(lon, lat, hh); s.vis = s[2] > 0 || s[3] > 1; return s; });
+      if (r.kind !== 'ground') {          // faint ground shadow under each arc
+        ctx.beginPath(); let pen = false;
+        for (const [lon, lat] of L.pts) { const s = st.toScreen(lon, lat, 0); if (s[2] > 0) { pen ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); pen = true; } else pen = false; }
+        ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 2; ctx.setLineDash([]); ctx.stroke();
+      }
+      const col = on ? C('--globe-pick') : r.kind === 'ground' ? C('--globe-ground') : r.kind === 'alt' ? C('--globe-alt') : r.booked ? C('--globe-booked') : C('--globe-flight');
+      ctx.beginPath(); let pen = false;
+      for (const s of L.scr) { if (s.vis) { pen ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); pen = true; } else pen = false; }
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.setLineDash(r.kind === 'ground' ? [1, 5] : r.kind === 'alt' ? [6, 6] : []);
+      if (on || hov) { ctx.strokeStyle = col; ctx.globalAlpha = 0.25; ctx.lineWidth = on ? 9 : 7; ctx.stroke(); ctx.globalAlpha = 1; }
+      ctx.strokeStyle = col; ctx.globalAlpha = r.kind === 'alt' && !on && !hov ? 0.55 : 1;
+      ctx.lineWidth = on ? 3 : r.kind === 'ground' ? 2.2 : 2; ctx.stroke(); ctx.globalAlpha = 1;
+      if (r.kind === 'flight' && !st.reduce) {   // travelling light along each flight
+        ctx.setLineDash([2, 40]); ctx.lineDashOffset = -st.dash * (on ? 1.6 : 1); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = on ? 3.4 : 2.4; ctx.stroke();
+        ctx.lineDashOffset = 0;
+      }
+      ctx.setLineDash([]);
+    }
+
+    // pins
+    ctx.font = '600 11px ' + (C('--font-anthropic-sans') || 'system-ui, sans-serif');
+    ctx.textBaseline = 'middle';
+    const placed = [];
+    for (const p of (st.pins || []).slice().sort((a, b) => a.lat - b.lat)) {
+      const s = st.toScreen(p.lon, p.lat, 0); if (s[2] <= 0.05) continue;
+      const [x, y] = s, hgt = 14;
+      ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - hgt); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(x, y, 3.2, 1.4, 0, 0, 2 * Math.PI); ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y - hgt, 4.6, 0, 2 * Math.PI);
+      ctx.fillStyle = p.home ? C('--globe-booked') : p.nights ? '#ffffff' : '#9fb1c9'; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#0a1120'; ctx.stroke();
+      const label = p.name, tw = ctx.measureText(label).width;
+      const hits = (lx, ly) => placed.some((q) => Math.abs(q[1] - ly) < 15 && lx < q[0] + q[2] + 6 && lx + tw > q[0] - 6);
+      const spots = [[x + 8, y - hgt], [x - 8 - tw, y - hgt], [x + 8, y - hgt + 16], [x - 8 - tw, y - hgt + 16], [x + 8, y - hgt - 16]];
+      const [lx, ly] = spots.find(([a, b]) => !hits(a, b)) || spots[0];
+      placed.push([lx, ly, tw]);
+      ctx.fillStyle = 'rgba(7,12,22,.75)'; ctx.fillRect(lx - 3, ly - 8, tw + 6, 16);
+      ctx.fillStyle = '#e8eef8'; ctx.fillText(label, lx, ly);
+    }
+  }
+</script>
