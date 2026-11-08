@@ -4,7 +4,7 @@ trip:
   currency: CAD
   start: 2027-06-06          # only plan this part of the sheet (Cat continues to Europe after)
   end: 2027-07-12
-  home: Toronto              # where your last flight should land
+  home: ""                   # where your last flight should land (blank = don't check; solo travel after Jul 12)
 
 sheet:
   # Leave blank and set the TRIP_SHEET_URL secret on GitHub instead (keeps the link private).

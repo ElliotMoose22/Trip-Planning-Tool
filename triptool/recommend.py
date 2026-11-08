@@ -77,6 +77,7 @@ class Suggestion:
     price: float
     saves: float | None
     kind: str               # date | calendar | nearby
+    route: str = ""         # "Bangkok → Bali" for route swaps
 
 
 @dataclass
@@ -127,10 +128,11 @@ def summarize(plan: Plan, results: dict[tuple[str, dt.date], "object"], s: Setti
                 continue
             saves = ref - q.price if ref else None
             if o in leg.alt_origins:
-                text = f"Fly {o.name} → {d.name} instead — matches your calendar"
-                r.suggestions.append(Suggestion(text, q.price, saves, "calendar"))
+                r.suggestions.append(Suggestion(f"Fly {o.name} → {d.name} and skip the overland trip",
+                                                q.price, saves, "calendar", f"{o.name} → {d.name}"))
             elif saves is not None and saves >= threshold:
-                r.suggestions.append(Suggestion(f"Fly {o.name} → {d.name} instead", q.price, saves, "nearby"))
+                r.suggestions.append(Suggestion(f"Fly {o.name} → {d.name} instead", q.price, saves, "nearby",
+                                                f"{o.name} → {d.name}"))
         r.suggestions.sort(key=lambda x: (x.kind != "calendar", -(x.saves or 0)))
         out.append(r)
     return out

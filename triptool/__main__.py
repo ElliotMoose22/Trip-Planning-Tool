@@ -50,7 +50,7 @@ def load_plan(s: Settings, sheet_json: str | None, today: dt.date) -> tuple[Plan
 
     # Only plan inside the trip window
     inside = lambda d: (not s.start or d >= s.start) and (not s.end or d <= s.end)
-    days = [d for d in days if inside(d.date)]
+    days = [d for d in days if inside(d.date) and (not s.end or d.date < s.end)]   # last day = travel day
     flights = [f for f in flights if inside(f.date)]
     plan = build_plan(days, flights, s.home)
     wrong = sorted((hidden_years(cal) | hidden_years(fl)) - {year})
@@ -141,6 +141,9 @@ def main(argv=None):
             print(f"  {f.date:%b %d}  {leg.origin.name} → {leg.destination.name}  ${f.cost or 0:,.0f}"
                   f"{'  BOOKED' if f.booked else ''}{'  (option B)' if f.option == 'B' else ''}"
                   f"{'  (from calendar)' if f.source == 'calendar' else ''}")
+        print("\nOn the ground:")
+        for g in plan.ground:
+            print(f"  by {g.by:%b %d}  {g.origin.name} → {g.destination.name}  {g.mode}  ~{g.km:,.0f} km  ~{g.hours:.0f} hrs")
         print("\nChecks:")
         for c in plan.checks:
             print(f"  [{c.level}] {c.text}")

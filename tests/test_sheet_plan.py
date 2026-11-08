@@ -43,8 +43,10 @@ def test_plan_checks():
     plan = build_plan(parse_calendar(CAL, today=TODAY), parse_flights(FLIGHTS, 2027))
     text = " ".join(c.text for c in plan.checks)
     assert "Tokyo → Fukuoka (GK509)" in text            # calendar-only flight
-    assert "Kagoshima the night before" in text          # notes say you moved on
-    assert "never gets you there from Bangkok" in text   # Phuket departure with no way there
+    assert "you're in Bangkok the night before" in text  # long bus to the Phuket flight
+    ground = [(g.origin.name, g.destination.name, g.mode) for g in plan.ground]
+    assert ("Kagoshima", "Fukuoka", "Train") in ground   # notes say you moved on -> overland back
+    assert ("Bangkok", "Phuket", "Bus") in ground
     assert "Concert in bali" in text                     # side note in the wrong week
     cal_leg = next(l for l in plan.legs if l.flight.source == "calendar")
     assert cal_leg.flight.cost == 132

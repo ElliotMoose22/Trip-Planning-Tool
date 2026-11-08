@@ -154,6 +154,8 @@ h3 { margin:6px 0 0; font-size:18px } .sub,.muted { color:var(--muted) } .small 
 .flex { width:100%; border-collapse:collapse; margin-top:10px; font-size:12px; text-align:center }
 .flex td { border:1px solid var(--line); padding:5px 2px } .flex td.best { background:rgba(26,127,75,.14) } .flex td.plan { outline:2px solid var(--muted); outline-offset:-2px }
 .opt { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:18px }
+.ground { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden }
+.ground td { padding:10px 14px; border-top:1px solid var(--line) } .ground tr:first-child td { border-top:0 } .ground .num { text-align:right; font-variant-numeric:tabular-nums; color:var(--muted) }
 footer { padding:28px 0 36px; color:var(--muted); font-size:12px }
 """
 
@@ -192,6 +194,13 @@ def render_html(s: Settings, plan: Plan, legs: list[LegResult], sigs: dict, stay
                     f'{col("Option B", opt["b"], opt["b_sheet"], opt["b_now"])}</div>{better}')
 
     flight_cards = "".join(_flight_card(lr, *sigs[lr.leg.id], cur) for lr in live)
+    ground_rows = "".join(
+        f'<tr><td>by {g.by:%a %b %-d}</td><td><b>{esc(g.origin.name)} → {esc(g.destination.name)}</b></td>'
+        f'<td>{esc(g.mode)}</td><td class="num">~{g.km:,.0f} km</td><td class="num">~{g.hours:.0f} hrs</td></tr>'
+        for g in plan.ground)
+    ground_html = (f'<h2>On the ground <span class="muted small">buses / trains inside each country, '
+                   f'estimated, not price-tracked</span></h2><table class="ground">{ground_rows}</table>'
+                   if plan.ground else "")
     stay_cards = "".join(_stay_card(x, cur) for x in stays)
     demo = '<div class="banner">Demo prices — add the SERPAPI_KEY secret to track real ones.</div>' if source == "demo" else ""
     headline = (f"<b>{len(buys)}</b> worth booking this week: " + ", ".join(
@@ -208,6 +217,7 @@ def render_html(s: Settings, plan: Plan, legs: list[LegResult], sigs: dict, stay
 <p>{headline}</p>{demo}</header>
 {checks_html}
 <h2>Flights <span class="muted small">per person · option A unless marked</span></h2><div class="grid">{flight_cards}</div>
+{ground_html}
 {opt_html}
 <h2>Stays <span class="muted small">per night for the room, 4★+ hotels</span></h2><div class="grid">{stay_cards}</div>
 <footer>BUY / WATCH / WAIT are rules of thumb from price history and how far out you are — not guarantees.
@@ -230,6 +240,9 @@ def render_markdown(s: Settings, plan: Plan, legs, sigs, stays, today, source) -
         best = next((f"{x.text}: {money(x.price)}" for x in lr.suggestions if (x.saves or 0) > 0), "")
         out.append(f"| **{sig.verdict}** | {lr.leg.origin.name} → {lr.leg.destination.name}{' (B)' if f.option == 'B' else ''} "
                    f"| {f.date:%b %-d} | {money(lr.plan_price)} | {money(f.cost)} | {best} |")
+    if plan.ground:
+        out += ["", "## On the ground (estimated)", *[f"- by {g.by:%b %-d}: {g.origin.name} → {g.destination.name} · "
+                                                      f"{g.mode} · ~{g.km:,.0f} km · ~{g.hours:.0f} hrs" for g in plan.ground]]
     out += ["", "## Stays (per night)", "| | Where | Dates | Now | Budget |", "|---|---|---|---|---|"]
     for x in stays:
         out.append(f"| **{x.signal.verdict}** | {x.stop.place.name} | {x.stop.check_in:%b %-d}–{x.stop.check_out:%b %-d} "
@@ -255,8 +268,20 @@ def plan_json(plan: Plan, legs: list[LegResult], sigs: dict, stays: list[StayRes
                   "reason": sigs[lr.leg.id][0].reason,
                   "suggestions": [{"text": x.text, "price": x.price, "saves": x.saves, "kind": x.kind} for x in lr.suggestions]}
                  for lr in legs],
+        "ground": [{"from": g.origin.name, "to": g.destination.name, "from_ll": [g.origin.lat, g.origin.lon],
+                    "to_ll": [g.destination.lat, g.destination.lon], "by": g.by.isoformat(), "mode": g.mode,
+                    "km": round(g.km), "hours": round(g.hours, 1)} for g in plan.ground],
+        "alternatives": [{"leg": lr.leg.id, "route": x.route, "price": x.price, "saves": x.saves, "kind": x.kind,
+                          "from_ll": _ll(x.route.split(" → ")[0]), "to_ll": _ll(x.route.split(" → ")[1])}
+                         for lr in legs for x in lr.suggestions if x.route],
         "checks": [{"level": c.level, "text": c.text} for c in plan.checks],
     }
+
+
+def _ll(name: str):
+    from . import places as P
+    p = P.lookup(name)
+    return [p.lat, p.lon] if p else None
 
 
 def write_report(s: Settings, plan: Plan, legs, stays, store: Store, source: str, today: dt.date,

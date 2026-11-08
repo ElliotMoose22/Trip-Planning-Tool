@@ -52,6 +52,17 @@ class Leg:
 
 
 @dataclass
+class GroundLeg:
+    origin: P.Place
+    destination: P.Place
+    by: dt.date          # the day you need to be there
+    mode: str
+    km: float
+    hours: float
+    why: str = ""
+
+
+@dataclass
 class Check:
     level: str        # "fix" | "heads-up"
     text: str
@@ -65,6 +76,7 @@ class Plan:
     legs: list[Leg]
     checks: list[Check]
     unknown_places: list[str]
+    ground: list[GroundLeg] = field(default_factory=list)
 
 
 def _split_travel(text: str) -> tuple[str, str] | None:
@@ -170,6 +182,7 @@ def build_plan(days: list[Day], flights: list[PlannedFlight], home: str | None =
                                 "I'm tracking it anyway — add it to the tab so the totals are right."))
 
     legs: list[Leg] = []
+    ground: list[GroundLeg] = []
     seen: set[str] = set()
     for f in sorted(all_flights, key=lambda f: (f.date, f.option)):
         o, dst = P.lookup(f.origin), P.lookup(f.destination)
@@ -183,18 +196,33 @@ def build_plan(days: list[Day], flights: list[PlannedFlight], home: str | None =
         leg = Leg(lid, f, o, dst)
         legs.append(leg)
 
-        # does the calendar have you somewhere else the night before?
+        # does the calendar have you somewhere else the night before? -> you go overland
         before = by_date.get(f.date - dt.timedelta(days=1))
         if before and before.place and before.place != o and before.place.country == o.country and not f.booked:
             leg.alt_origins.append(before.place)
-            if before.explicit:
-                checks.append(Check("fix", f"{f.date:%b %-d}: the flights tab flies {o.name} → {dst.name}, but the calendar "
-                                    f"has you in {before.place.name} the night before. I'm also pricing "
-                                    f"{before.place.name} → {dst.name}."))
-            else:
-                checks.append(Check("fix", f"{f.date:%b %-d}: you fly out of {o.name}, but the calendar never gets you "
-                                    f"there from {before.place.name}. Add that leg, or I can price "
-                                    f"{before.place.name} → {dst.name} directly (doing that now)."))
+            mode, road, hours = P.ground_trip(before.place, o)
+            ground.append(GroundLeg(before.place, o, f.date, mode, road, hours, why="to catch a flight"))
+            if hours >= 8:
+                checks.append(Check("heads-up", f"{f.date:%b %-d}: your flight leaves {o.name}, but you're in "
+                                    f"{before.place.name} the night before — about {hours:.0f} hrs by "
+                                    f"{mode.lower()}. Plan an overnight trip or a night in {o.name}, or fly "
+                                    f"from {before.place.name} instead (priced below)."))
+
+    # moving between stops inside a country with no flight -> overland
+    for a, b in zip(stops, stops[1:]):
+        flown = any(l.destination == b.place and abs((l.flight.date - b.check_in).days) <= 1 for l in legs)
+        if flown or a.place == b.place:
+            continue
+        if a.place.country == b.place.country:
+            if any(g.origin == a.place and g.destination == b.place for g in ground):
+                continue
+            mode, road, hours = P.ground_trip(a.place, b.place)
+            if road >= P.GROUND_MIN_KM:
+                ground.append(GroundLeg(a.place, b.place, b.check_in, mode, road, hours))
+        else:
+            checks.append(Check("fix", f"{b.check_in:%b %-d}: nothing gets you from {a.place.name} to "
+                                f"{b.place.name} — add a flight (or boat) to your table."))
+    ground.sort(key=lambda g: g.by)
 
     # ---- 4. other heads-ups ----
     for s in stops:
@@ -224,7 +252,7 @@ def build_plan(days: list[Day], flights: list[PlannedFlight], home: str | None =
         checks.append(Check("heads-up", f"I don't know where “{u}” is — add it to triptool/places.py."))
 
     year = days[0].date.year if days else dt.date.today().year
-    return Plan(year, nights, stops, legs, checks, sorted(unknown))
+    return Plan(year, nights, stops, legs, checks, sorted(unknown), ground)
 
 
 def _first_money(text: str) -> float | None:

@@ -78,9 +78,10 @@ def row_note(lr: LegResult, sig: Signal) -> str:
         parts.append("first price check")
     for s in lr.suggestions[:2]:
         if s.kind == "calendar":
-            parts.append(f"{s.text.replace(' instead — matches your calendar', '')} {_money(s.price)} (matches calendar)")
+            parts.append(f"or fly {s.route} {_money(s.price)} and skip the bus")
         elif s.saves and s.saves > 0:
-            parts.append(f"cheaper: {s.text.replace('Fly ', '').replace(' instead', '')} {_money(s.price)} (save {_money(s.saves)})")
+            what = s.route or s.text.replace("Fly ", "").replace(" instead", "")
+            parts.append(f"cheaper: {what} {_money(s.price)} (save {_money(s.saves)})")
     return " · ".join(parts)
 
 

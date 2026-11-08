@@ -123,3 +123,24 @@ def mentioned(text: str) -> list[Place]:
 
 def alternates(place: Place) -> list[Place]:
     return [PLACES[n.lower()] for n in ALTERNATES.get(place.name.lower(), [])]
+
+
+# Which island a place is on, where it matters for ground travel (bus + ferry).
+ISLAND = {"bali": "Bali", "jakarta": "Java", "yogyakarta": "Java", "lombok": "Lombok",
+          "labuan bajo": "Flores", "okinawa": "Okinawa", "koh samui": "Koh Samui"}
+
+# How you get around inside each country (only legs over GROUND_MIN_KM are listed).
+GROUND_MODE = {"Japan": ("Train", 110), "default": ("Bus", 55)}   # mode, average km/h door to door
+GROUND_MIN_KM = 150
+
+
+def ground_trip(a: Place, b: Place) -> tuple[str, float, float]:
+    """(mode, road km, hours) for an overland trip inside one country."""
+    import math
+    la1, lo1, la2, lo2 = map(math.radians, (a.lat, a.lon, b.lat, b.lon))
+    h = math.sin((la2 - la1) / 2) ** 2 + math.cos(la1) * math.cos(la2) * math.sin((lo2 - lo1) / 2) ** 2
+    road = 12742 * math.asin(math.sqrt(h)) * 1.3
+    mode, speed = GROUND_MODE.get(a.country, GROUND_MODE["default"])
+    ferry = ISLAND.get(a.name.lower()) != ISLAND.get(b.name.lower())
+    hours = road / speed + (2.5 if ferry else 0)
+    return (f"{mode} + ferry" if ferry else mode), road, hours
