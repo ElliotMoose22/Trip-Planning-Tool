@@ -86,4 +86,12 @@ triptool/providers.py   prices (demo, SerpApi)
 triptool/signals.py     BUY / WATCH / WAIT rules
 triptool/report.py      HTML / Markdown report + plan.json
 triptool/writeback.py   write prices + notes into your table in the sheet
+
+
+ ## OVERVIEW + IDEAS
+
+Current set up is using the Google Sheets calendar as a reference to determine flight path and search for best flights and possible alternatives.
+Need to find a clear way to determine how Claude can best search for other flights and options, without making the scope too large.
+Should create a "key cities" log, that has places that we want included in the trip no matter what. Can also define the amount of time we are willing to schange for each flight, I am thinking +/- two days to give best price reccomendation. Also want it to suggest alternative routes and options of travel, can do this by allowing Claude to pick amongst other travel hubs that are on route, whihc we may not mention in the Google Sheets.
+
 ```
