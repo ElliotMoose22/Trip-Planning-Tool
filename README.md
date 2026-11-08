@@ -33,6 +33,58 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 
 **Also:** a 3D globe of the route ([live map](https://elliotmoose22.github.io/Trip-Planning-Tool/)) and an Instagram reels inbox (below).
 
+## Where we left off (Nov 8, 2026) — start here next session
+
+### What's built
+| Piece | Where | State |
+|---|---|---|
+| Sheet as the plan | SUMMER TRIP sheet: **Places**, **Legs**, **Recommendations**, **Reels**, **Ideas** tabs | ✅ Colour-coded by country. Your notes go in "Notes (yours)"; the tool writes only in "Trip tool says (weekly)". |
+| Weekly price check + recommendations | `weekly-report.yml`, Sundays ~8am | ⚠️ Not run for real yet: needs the secrets below |
+| Live dashboard (for us) | [claude.ai dashboard](https://claude.ai/artifact/E3RwsDk8yCQNBTz4Pdi53U) | ✅ Reads Legs / Recommendations / Reels live through the Google Sheets connector |
+| Shared map (for Cat) | [GitHub Pages map](https://elliotmoose22.github.io/Trip-Planning-Tool/) | ✅ Route, recommendations, reel pins (green / yellow / red), day-trip rings, reel cards |
+| Instagram reels inbox | trip Instagram account → Meta app (dev mode, Unified login) → Apps Script in the sheet (`instagram/Code.gs`) → Reels tab | ✅ Working: real reels land in the Reels tab within seconds. The Apps Script URL verified directly, so `worker.js` isn't needed. |
+| Daily reel placement | `daily-reels.yml`, ~6:45pm | ⚠️ First run failed on missing secrets; reels were placed by hand from chat for now |
+
+### To do before it runs on its own
+1. **Add `GOOGLE_SERVICE_ACCOUNT_JSON`** (GitHub secret). Steps under *Letting the weekly job edit the sheet* below.
+   Without it nothing is written back to the sheet (prices, reel places, Ideas, Recommendations).
+2. **Re-make the Claude token**: run `claude setup-token` in Terminal and save it to the `CLAUDE_CODE_OAUTH_TOKEN`
+   secret as **one unbroken line**. The current one was pasted with a line break, and it was shared in chat.
+3. **Update the Apps Script**: re-paste `instagram/Code.gs` (new: `8 Kamakura, Enoshima` places, relabelling of
+   "Unknown" senders), then **Deploy → Manage deployments → pencil → Version: New version → Deploy**.
+4. **Cat sends `cat`** to the trip account (her first reel, Maehama Beach, shows as "Unknown (1149…)"). You've registered as `elliot`.
+5. **Check `SERPAPI_KEY`** is set if you want real flight / hotel prices (otherwise reports use demo prices).
+6. Then run **Actions → Daily reels → Run workflow** and **Actions → Weekly price report → Run workflow** and check both go green.
+
+### Caveats
+- **Instagram:** reels must be sent 1:1 to the trip account. Group chats aren't delivered by Instagram's API. The Meta app
+  must stay in **Development mode**, and only Instagram Testers (trip account, Elliot, Cat) are delivered. A new sender
+  = add them as a tester. New DMs from non-followers can sit in **Requests**; accept them.
+- **Caption reading** only sees the caption text, not the video or carousel photos. When a caption doesn't name the place, send
+  `8 Place, Place` instead of `8`. It uses your Claude Pro usage (small). It's not tested in GitHub Actions yet.
+- **Photos** (Wikipedia) and **geocoding** (OpenStreetMap) only run on GitHub. They're untested until the secrets are in; pins show a
+  "photo arrives" placeholder meanwhile.
+- **Day trip = 2.5 hrs each way** (~115 km straight line), a rough estimate. It ignores ferries and mountains. Change it with
+  `reels: daytrip_hours` in `trip.yaml`.
+- The **6 sample reels** in the Reels tab (marked "Sample — delete…") are demo data. Delete them when you like; their 3
+  "Idea" recommendations (Hua Hin, Ha Long Bay, Chiang Mai) will go too.
+- The Instagram access token saved from Meta isn't used yet. It's only needed if we add auto-replies. Never put it in the repo.
+- GitHub warns that Node 20 actions are deprecated. That's harmless for now; bump `actions/checkout` / `setup-python` when it starts failing.
+
+### Open trip decisions (from the latest recommendations)
+- Phuket is 6 nights (max 5): move Okinawa → Bangkok to Jun 18 and the Bangkok → Phuket bus to Jun 22?
+- Hanoi is 7 nights (max 5, meeting Soph Jul 5–10): widen the range or add a nearby stop.
+- The Bangkok → Phuket bus needs a date (~16 hrs: night bus, flight, or a night in Hua Hin on the way).
+- Fukuoka → Kagoshima: train or rental car (Kumamoto Castle reel is on the way).
+- "Misc. Nearby Places" in Indonesia needs a real town or island name.
+- Kagoshima → Okinawa flight has no price yet.
+
+### Ideas for next time
+- Auto-reply from the trip account ("Got it ✓ Hua Hin, 8/10").
+- Photos taken from the reel itself instead of Wikipedia.
+- Hotel price tracking per stop on the map.
+- Planning Elliot's solo leg after July 12.
+
 ## Setup (GitHub secrets)
 
 **Settings → Secrets and variables → Actions → New repository secret**
