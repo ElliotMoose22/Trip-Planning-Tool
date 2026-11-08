@@ -18,12 +18,15 @@
 const TAB = 'Reels';
 const HEADER_ROW = 3;            // row with "Received | From | Reel link | ..."
 
+const VERIFY_TOKEN = 'asia-2027-reels';   // must match the Verify token typed into Meta
+
 function doGet(e) {
   // Meta checks the webhook once: echo hub.challenge back if the token matches.
   const p = e.parameter || {};
-  const token = PropertiesService.getScriptProperties().getProperty('VERIFY_TOKEN');
-  if (p['hub.mode'] === 'subscribe' && p['hub.verify_token'] === token) {
-    return ContentService.createTextOutput(p['hub.challenge']);
+  const token = String(PropertiesService.getScriptProperties().getProperty('VERIFY_TOKEN') || VERIFY_TOKEN).trim();
+  if (p['hub.mode'] === 'subscribe') {
+    if (String(p['hub.verify_token'] || '').trim() === token) return ContentService.createTextOutput(p['hub.challenge']);
+    return ContentService.createTextOutput('Verify token does not match the one in the script.');
   }
   return ContentService.createTextOutput('Trip reels inbox is running.');
 }
