@@ -35,26 +35,40 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 
 ## Where we left off (Nov 8, 2026) — start here next session
 
+### ▶ Next session: do these two
+**1. Turn on the weekly price tracker + a Sunday summary to your phone / inbox**
+- Add the `SERPAPI_KEY` secret (free account at [serpapi.com](https://serpapi.com); ~45 searches per weekly run).
+- Run **Actions → Weekly price report → Run workflow** once and check Legs gets real Price / Length / Flight no.
+  and BUY / WATCH / WAIT notes, and the map shows them.
+- Build the Sunday summary: a short "what changed this week" message (biggest drops, anything to BUY now, new
+  recommendations) sent to your phone and/or email. Decide: email (GitHub Actions + Gmail app password) or push
+  notification (e.g. ntfy app, no account needed).
+
+**2. Auto-reply from the trip Instagram account**
+- When a reel arrives, reply in the DM: *"Got it ✓ Kamakura, 8/10"*; after the nightly run, *"Kamakura → day trip from
+  Tokyo 🟢"*, or *"Couldn't tell where this is: reply `8 Place (Town)`"*.
+- Needs the Instagram access token you saved from Meta, stored in Apps Script **Script properties** as `IG_TOKEN`
+  (never in the repo), and the Send API call added to `instagram/Code.gs` (replies within Instagram's 24-hour window).
+
+After that, the next big step is **day-by-day plans from the reels** (group each city's reels by neighbourhood and
+rating into days, shown as daily routes on the 3D map), then **where to stay** based on where the reels cluster.
+
 ### What's built
 | Piece | Where | State |
 |---|---|---|
 | Sheet as the plan | SUMMER TRIP sheet: **Places**, **Legs**, **Recommendations**, **Reels**, **Ideas** tabs | ✅ Colour-coded by country. Your notes go in "Notes (yours)"; the tool writes only in "Trip tool says (weekly)". |
-| Weekly price check + recommendations | `weekly-report.yml`, Sundays ~8am | ⚠️ Not run for real yet: needs the secrets below |
-| Live dashboard (for us) | [claude.ai dashboard](https://claude.ai/artifact/E3RwsDk8yCQNBTz4Pdi53U) | ✅ Reads Legs / Recommendations / Reels live through the Google Sheets connector |
-| Shared map (for Cat) | [GitHub Pages map](https://elliotmoose22.github.io/Trip-Planning-Tool/) | ✅ Route, recommendations, reel pins (green / yellow / red), day-trip rings, reel cards |
-| Instagram reels inbox | trip Instagram account → Meta app (dev mode, Unified login) → Apps Script in the sheet (`instagram/Code.gs`) → Reels tab | ✅ Working: real reels land in the Reels tab within seconds. The Apps Script URL verified directly, so `worker.js` isn't needed. |
-| Nightly reel placement | `daily-reels.yml`, midnight Toronto | ⚠️ First run failed on missing secrets; reels were placed by hand from chat for now |
+| Weekly price check + recommendations | `weekly-report.yml`, Sundays ~8am | ⚠️ Built, not run with real prices yet (needs `SERPAPI_KEY`): next session |
+| Instagram reels inbox | trip account → Meta app (dev mode, Unified login) → Apps Script in the sheet (`instagram/Code.gs`) → Reels tab | ✅ Working; one row per reel, senders tagged by `elliot` / `cat` |
+| Nightly reel placement | `daily-reels.yml`, midnight Toronto | ✅ Watches each reel (frames or cover), Claude reads caption + frames, places every spot (town as fallback), writes the sheet, refreshes the map |
+| Shared map (for us and Cat) | [GitHub Pages map](https://elliotmoose22.github.io/Trip-Planning-Tool/) | ✅ Globe → cloud transition → 3D street map with buildings; reel pins, bubbles, day-trip rings, reel cards. Flat street map if 3D can't draw. |
+| Live dashboard | [claude.ai dashboard](https://claude.ai/artifact/E3RwsDk8yCQNBTz4Pdi53U) | ✅ Reads the sheet live; globe only (claude.ai can't load street maps) |
 
-### To do before it runs on its own
-1. **Add `GOOGLE_SERVICE_ACCOUNT_JSON`** (GitHub secret). Steps under *Letting the weekly job edit the sheet* below.
-   Without it nothing is written back to the sheet (prices, reel places, Ideas, Recommendations).
-2. **Re-make the Claude token**: run `claude setup-token` in Terminal and save it to the `CLAUDE_CODE_OAUTH_TOKEN`
-   secret as **one unbroken line**. The current one was pasted with a line break, and it was shared in chat.
-3. **Update the Apps Script**: re-paste `instagram/Code.gs` (new: `8 Kamakura, Enoshima` places, relabelling of
-   "Unknown" senders), then **Deploy → Manage deployments → pencil → Version: New version → Deploy**.
-4. **Cat sends `cat`** to the trip account (her first reel, Maehama Beach, shows as "Unknown (1149…)"). You've registered as `elliot`.
-5. **Check `SERPAPI_KEY`** is set if you want real flight / hotel prices (otherwise reports use demo prices).
-6. Then run **Actions → Daily reels → Run workflow** and **Actions → Weekly price report → Run workflow** and check both go green.
+### Secrets on GitHub
+`TRIP_SHEET_URL` ✅ · `GOOGLE_SERVICE_ACCOUNT_JSON` ✅ · `CLAUDE_CODE_OAUTH_TOKEN` ✅ (regenerated, one line) · `SERPAPI_KEY` ⏳ next session
+
+### Small loose ends
+- Elliot: send `elliot` to the trip account once more (recent reels came in as "Unknown (2929…)"; this relabels them).
+- Check the first real nightly run (Nov 9, midnight): the two newest reels and the Kagoshima river spots should be placed.
 
 ### Caveats
 - **Instagram:** reels must be sent 1:1 to the trip account. Group chats aren't delivered by Instagram's API. The Meta app
