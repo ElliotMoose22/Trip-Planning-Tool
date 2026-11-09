@@ -69,8 +69,6 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
   "photo arrives" placeholder meanwhile.
 - **Day trip = 2.5 hrs each way** (~115 km straight line), a rough estimate. It ignores ferries and mountains. Change it with
   `reels: daytrip_hours` in `trip.yaml`.
-- The **6 sample reels** in the Reels tab (marked "Sample — delete…") are demo data. Delete them when you like; their 3
-  "Idea" recommendations (Hua Hin, Ha Long Bay, Chiang Mai) will go too.
 - The Instagram access token saved from Meta isn't used yet. It's only needed if we add auto-replies. Never put it in the repo.
 - GitHub warns that Node 20 actions are deprecated. That's harmless for now; bump `actions/checkout` / `setup-python` when it starts failing.
 
