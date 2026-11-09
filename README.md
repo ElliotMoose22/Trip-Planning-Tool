@@ -134,8 +134,10 @@ sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every night at 
 
 The maps show each reel as a small diamond pin with the day-trip rings around your stops; click one for
 the name, About line, photo, rating and who sent it. Crowded reels (Tokyo) become a count bubble. On the
-shared map, clicking a city, a reel or a bubble — or zooming in far enough — opens a **street-level map**
-(dark OpenStreetMap / CARTO tiles) with each reel at its exact spot, restaurants included. The claude.ai
+shared map, clicking a city, a reel or a bubble — or zooming in far enough — opens a **3D street map**
+(MapLibre + OpenFreeMap's dark style: buildings in 3D, streets, water, parks, tilted like Google Earth; drag
+with right-click / two fingers to rotate, **2D/3D** button to flatten) with each reel at its exact spot,
+restaurants included. If the 3D map can't load (old browser, no WebGL) a flat dark street map is used instead. The claude.ai
 dashboard can't load map tiles, so it stays at globe level. Setup: [instagram/SETUP.md](instagram/SETUP.md).
 Change the day-trip limit with `reels: daytrip_hours` in `trip.yaml`.
 

@@ -56,6 +56,13 @@
   .city button:hover { border-color:#4a6290; } .city button:focus-visible { outline: 2px solid var(--pick); outline-offset: 1px; }
   .city .attr { position:absolute; right:6px; bottom:4px; font-size:10px; color:#7d8aa3; background: rgba(7,12,22,.7); padding: 1px 5px; border-radius: 4px; }
   .city .attr a { color: inherit; }
+  .city .m3d { position:absolute; inset:0; display:none; z-index:1; }
+  .city .cbar, .city .count, .city .tip { z-index:3; }
+  .city.three .m3d { display:block; } .city.three > canvas, .city.three .attr { display:none; }
+  .city .maplibregl-ctrl-attrib { background: rgba(7,12,22,.7) !important; color:#7d8aa3; font-size:10px; }
+  .city .maplibregl-ctrl-attrib a { color:#9fb1c9; }
+  .city .maplibregl-popup-content { background:#0e1626; color: var(--ink); border:1px solid #2b3a57; border-radius:8px; padding:6px 10px; font-size:12px; }
+  .city .maplibregl-popup-tip { display:none; }
   .city .count { position:absolute; left:12px; bottom:10px; font-size:12px; color: var(--muted); background: rgba(7,12,22,.75); padding: 3px 8px; border-radius: 6px; }
   .tip { position:absolute; pointer-events:none; background: rgba(12,18,30,.94); border:1px solid #2b3a57; border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space:nowrap; transform: translate(-50%, calc(-100% - 12px)); }
   .tip em { font-style:normal; color: var(--muted); display:block; }
@@ -124,10 +131,12 @@
           <button type="button" id="c-back">← Globe</button>
           <span class="name" id="c-name"></span>
           <div class="btns">
+            <button type="button" id="c-tilt" hidden>2D</button>
             <button type="button" id="c-in" aria-label="Zoom in">+</button>
             <button type="button" id="c-out" aria-label="Zoom out">−</button>
           </div>
         </div>
+        <div class="m3d" id="m3d"></div>
         <div class="count" id="c-count"></div>
         <div class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></div>
       </div>
@@ -563,16 +572,112 @@
       S.open = true; box.classList.add('on'); size();
       document.getElementById('c-name').textContent = name || '';
       goto(lon, lat, z || 11, false); paint();
+      Map3D.open(lon, lat, z || 11);                 // upgrades to the 3D street map when it loads
     }
     function close() {
       if (!S.open) return; S.open = false; box.classList.remove('on'); ctip.hidden = true;
       if (G.k >= GLOBE_MAX * 0.9) G.setK(GLOBE_MAX * 0.6);
     }
     document.getElementById('c-back').onclick = close;
-    document.getElementById('c-in').onclick = () => d3.select(cv).transition().duration(250).call(zb.scaleBy, 2);
-    document.getElementById('c-out').onclick = () => { if (zoomOf(S.t.k) <= 5) close(); else d3.select(cv).transition().duration(250).call(zb.scaleBy, 0.5); };
+    document.getElementById('c-in').onclick = () => Map3D.active() ? Map3D.zoomBy(1) : d3.select(cv).transition().duration(250).call(zb.scaleBy, 2);
+    document.getElementById('c-out').onclick = () => { if (Map3D.active()) return Map3D.zoomBy(-1);
+      if (zoomOf(S.t.k) <= 5) close(); else d3.select(cv).transition().duration(250).call(zb.scaleBy, 0.5); };
     new ResizeObserver(() => { if (S.open) { const c = proj().invert([S.w / 2, S.h / 2]); size(); goto(c[0], c[1], zoomOf(S.t.k)); } }).observe(box);
-    return { open, close, paint, isOpen: () => S.open };
+    const repaint = () => { paint(); Map3D.refresh(); };
+    return { open, close, paint: repaint, isOpen: () => S.open };
+  })();
+
+  // ---- 3D street map (MapLibre + OpenFreeMap dark): buildings stand up, streets and water, tilted like Google Earth.
+  //      Loaded only when a city is opened; if it can't load (no WebGL, offline) the flat street map above stays.
+  const Map3D = (() => {
+    const box = document.getElementById('city'), el = document.getElementById('m3d'), tilt = document.getElementById('c-tilt');
+    let map = null, ready = false, loading = null, failed = false, pending = null;
+    const load = () => loading || (loading = new Promise((ok, no) => {
+      if (window.maplibregl) return ok();
+      const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css'; document.head.appendChild(css);
+      const js = document.createElement('script'); js.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+      js.onload = () => ok(); js.onerror = no; document.head.appendChild(js);
+      setTimeout(() => no(new Error('timeout')), 12000);
+    }));
+    const ring = (p) => ({ type: 'Feature', properties: { name: p.name }, geometry: d3.geoCircle().center([p.lon, p.lat]).radius(DAYTRIP_KM / 111.2).precision(2)() });
+    const reelsFC = () => ({ type: 'FeatureCollection', features: reels.map((r) => ({ type: 'Feature', id: undefined,
+      properties: { id: r.id, place: (r.approx ? '≈ ' : '') + r.place, colour: REEL_COL[r.colour] || REEL_COL.Red, approx: !!r.approx,
+                    sel: reel && reel.id === r.id ? 1 : 0 }, geometry: { type: 'Point', coordinates: [r.lon, r.lat] } })) });
+    async function build(lon, lat, z) {
+      await load();
+      const gl = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
+      if (!gl) throw new Error('no WebGL');
+      const style = await fetch('https://tiles.openfreemap.org/styles/dark').then((r) => r.json());
+      // keep it calm: drop POI icons / house numbers, keep streets, water, parks and place names
+      style.layers = style.layers.filter((l) => !/poi|housenum|aeroway|transit|rail_station|mountain_peak/i.test(l.id));
+      const font = (style.layers.find((l) => l.type === 'symbol' && l.layout && Array.isArray(l.layout['text-font'])) || { layout: { 'text-font': ['Noto Sans Regular'] } }).layout['text-font'];
+      const vec = Object.keys(style.sources).find((k) => style.sources[k].type === 'vector');
+      style.layers = style.layers.filter((l) => !(l['source-layer'] === 'building' && l.type === 'fill'));
+      const firstLabel = (style.layers.find((l) => l.type === 'symbol') || {}).id;
+      map = new maplibregl.Map({ container: el, style, center: [lon, lat], zoom: z, pitch: 55, bearing: -15, maxPitch: 70,
+        attributionControl: { compact: true }, dragRotate: true, minZoom: 3 });
+      map.on('load', () => {
+        map.addLayer({ id: 'b3d', type: 'fill-extrusion', source: vec, 'source-layer': 'building', minzoom: 13,
+          paint: { 'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#202b3e', 60, '#2c3a55', 200, '#3a4b6b'],
+                   'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 13, 0, 14.5, ['coalesce', ['get', 'render_height'], 8]],
+                   'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.88 } }, firstLabel);
+        map.addSource('rings', { type: 'geojson', data: { type: 'FeatureCollection', features: pins.filter((p) => p.nights).map(ring) } });
+        map.addLayer({ id: 'rings-fill', type: 'fill', source: 'rings', paint: { 'fill-color': '#5fd39a', 'fill-opacity': 0.05 } });
+        map.addLayer({ id: 'rings-line', type: 'line', source: 'rings', paint: { 'line-color': '#5fd39a', 'line-opacity': 0.75, 'line-width': 1.5, 'line-dasharray': [3, 3] } });
+        map.addSource('route', { type: 'geojson', data: { type: 'FeatureCollection', features: rows.filter((r) => r.kind !== 'alt').map((r) => ({ type: 'Feature',
+          properties: { c: r.kind === 'ground' ? '#9fb1c9' : r.booked ? '#7fb2ff' : '#ffb36b', d: r.kind === 'ground' ? 1 : 0 },
+          geometry: { type: 'LineString', coordinates: [[r.a[1], r.a[0]], [r.b[1], r.b[0]]] } })) } });
+        map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': ['get', 'c'], 'line-width': 2.5, 'line-opacity': 0.85 } });
+        map.addSource('stops', { type: 'geojson', data: { type: 'FeatureCollection', features: pins.map((p) => ({ type: 'Feature', properties: { name: p.name, n: p.nights || 0 }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } })) } });
+        map.addLayer({ id: 'stops', type: 'circle', source: 'stops', paint: { 'circle-radius': 7, 'circle-color': ['case', ['>', ['get', 'n'], 0], '#ffffff', '#9fb1c9'], 'circle-stroke-color': '#0a1120', 'circle-stroke-width': 2 } });
+        map.addLayer({ id: 'stops-label', type: 'symbol', source: 'stops', layout: { 'text-field': ['get', 'name'], 'text-font': font, 'text-size': 14, 'text-offset': [0, -1.4], 'text-anchor': 'bottom' },
+          paint: { 'text-color': '#ffffff', 'text-halo-color': '#0a1120', 'text-halo-width': 2 } });
+        map.addSource('reels', { type: 'geojson', data: reelsFC(), cluster: true, clusterRadius: 38, clusterMaxZoom: 16 });
+        map.addLayer({ id: 'clusters', type: 'circle', source: 'reels', filter: ['has', 'point_count'],
+          paint: { 'circle-color': '#0e1626', 'circle-stroke-color': '#5fd39a', 'circle-stroke-width': 3, 'circle-radius': ['step', ['get', 'point_count'], 13, 5, 16, 15, 20] } });
+        map.addLayer({ id: 'cluster-n', type: 'symbol', source: 'reels', filter: ['has', 'point_count'],
+          layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': font, 'text-size': 12, 'text-allow-overlap': true }, paint: { 'text-color': '#e8eef8' } });
+        map.addLayer({ id: 'reel-sel', type: 'circle', source: 'reels', filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'sel'], 1]],
+          paint: { 'circle-radius': 15, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#ffe08a', 'circle-stroke-width': 3 } });
+        map.addLayer({ id: 'reel', type: 'circle', source: 'reels', filter: ['!', ['has', 'point_count']],
+          paint: { 'circle-radius': 8, 'circle-color': ['get', 'colour'], 'circle-stroke-color': ['case', ['get', 'approx'], '#e8eef8', '#0a1120'],
+                   'circle-stroke-width': ['case', ['get', 'approx'], 2.5, 2], 'circle-pitch-alignment': 'viewport' } });
+        map.addLayer({ id: 'reel-label', type: 'symbol', source: 'reels', filter: ['!', ['has', 'point_count']], minzoom: 11,
+          layout: { 'text-field': ['get', 'place'], 'text-font': font, 'text-size': 12, 'text-offset': [0, 1.2], 'text-anchor': 'top', 'text-optional': true },
+          paint: { 'text-color': '#e8eef8', 'text-halo-color': '#0a1120', 'text-halo-width': 1.6 } });
+        const byId = (id) => reels.find((r) => r.id === id);
+        map.on('click', 'reel', (e) => { const r = byId(e.features[0].properties.id); if (r) pickReel(r, true); });
+        map.on('click', 'clusters', (e) => { const f = e.features[0];
+          map.getSource('reels').getClusterExpansionZoom(f.properties.cluster_id).then((zz) => map.easeTo({ center: f.geometry.coordinates, zoom: zz + 0.3 })); });
+        for (const id of ['reel', 'clusters', 'stops']) { map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; }); map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; }); }
+        const pop = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 12 });
+        map.on('mousemove', 'reel', (e) => { const r = byId(e.features[0].properties.id); if (r) pop.setLngLat(e.lngLat).setHTML('').setText(`${r.place} · ${r.rating ? r.rating + '/10' : 'unrated'} · ${r.sender || ''}`).addTo(map); });
+        map.on('mouseleave', 'reel', () => pop.remove());
+        map.on('moveend', count);
+        map.on('zoomend', () => { if (map.getZoom() < 4.6 && ready) document.getElementById('c-back').click(); });
+        ready = true; box.classList.add('three'); tilt.hidden = false; count();
+        if (pending) { const p = pending; pending = null; jump(...p); }
+      });
+    }
+    function count() {
+      if (!ready) return; const b = map.getBounds();
+      const n = reels.filter((r) => b.contains([r.lon, r.lat])).length;
+      document.getElementById('c-count').textContent = n ? `${n} reel${n > 1 ? 's' : ''} in view` : 'No reels in view yet';
+    }
+    function jump(lon, lat, z) { map.resize(); map.jumpTo({ center: [lon, lat], zoom: z, pitch: map.getPitch() || 55 }); count(); }
+    function open(lon, lat, z) {
+      if (failed) return;
+      if (ready) { box.classList.add('three'); jump(lon, lat, z); return; }
+      pending = [lon, lat, z];
+      if (!map) build(lon, lat, z).catch((e) => { failed = true; console.warn('3D map unavailable, using the flat map:', e && e.message); });
+    }
+    tilt.onclick = () => { if (!ready) return; const flat = map.getPitch() > 5; map.easeTo({ pitch: flat ? 0 : 55, bearing: flat ? 0 : -15 }); tilt.textContent = flat ? '3D' : '2D'; };
+    new ResizeObserver(() => { if (ready) map.resize(); }).observe(box);
+    return {
+      open, active: () => ready && box.classList.contains('three'),
+      zoomBy: (d) => { if (d < 0 && map.getZoom() <= 5) return document.getElementById('c-back').click(); map.easeTo({ zoom: map.getZoom() + d }); },
+      refresh: () => { if (ready) map.getSource('reels').setData(reelsFC()); },
+    };
   })();
 
   drawLegs(); drawDetail(); size(); fit();
