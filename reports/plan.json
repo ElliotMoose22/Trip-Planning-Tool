@@ -461,7 +461,8 @@
    "link": "https://www.instagram.com/reel/sample1",
    "fits": "Day trip from Tokyo (~0.9 hrs each way)",
    "colour": "Green",
-   "photo": ""
+   "photo": "",
+   "about": "Giant bronze Buddha and Hase-dera temple in a seaside town an hour from Tokyo."
   },
   {
    "place": "Hua Hin",
@@ -473,7 +474,8 @@
    "link": "https://www.instagram.com/reel/sample2",
    "fits": "On the way from Bangkok to Phuket (~3.1 hrs from Bangkok) \u2014 worth a night",
    "colour": "Yellow",
-   "photo": ""
+   "photo": "",
+   "about": "Night market food and long beaches on the Gulf, halfway to the south."
   },
   {
    "place": "Phi Phi Islands",
@@ -485,7 +487,8 @@
    "link": "https://www.instagram.com/reel/sample3",
    "fits": "Day trip from Phuket (~1.0 hrs each way)",
    "colour": "Green",
-   "photo": ""
+   "photo": "",
+   "about": "Boat day around limestone cliffs and turquoise lagoons off Phuket."
   },
   {
    "place": "Nusa Penida",
@@ -497,7 +500,8 @@
    "link": "https://www.instagram.com/reel/sample4",
    "fits": "Day trip from Bali (~0.8 hrs each way)",
    "colour": "Green",
-   "photo": ""
+   "photo": "",
+   "about": "Kelingking's T-Rex cliff and beach on Nusa Penida, a boat ride from Bali."
   },
   {
    "place": "Ha Long Bay",
@@ -509,7 +513,8 @@
    "link": "https://www.instagram.com/reel/sample5",
    "fits": "Overnight trip from Hanoi (~3.0 hrs each way)",
    "colour": "Yellow",
-   "photo": ""
+   "photo": "",
+   "about": "Overnight cruise through limestone karsts in Ha Long Bay."
   },
   {
    "place": "Chiang Mai",
@@ -521,7 +526,8 @@
    "link": "https://www.instagram.com/reel/sample6",
    "fits": "Doesn't fit the route \u2014 ~582 km from Bangkok",
    "colour": "Red",
-   "photo": ""
+   "photo": "",
+   "about": "Old city temples and the night bazaar in northern Thailand."
   },
   {
    "place": "Maehama Beach (Aka Island)",
@@ -533,7 +539,8 @@
    "link": "https://www.instagram.com/reel/De_B_-UNUVj/",
    "fits": "Day trip from Okinawa (~0.9 hrs each way)",
    "colour": "Green",
-   "photo": ""
+   "photo": "",
+   "about": "Sunset on Maehama Beach, Aka Island in the Kerama Islands, with deer wandering the sand."
   },
   {
    "place": "Kumamoto Castle",
@@ -545,7 +552,8 @@
    "link": "https://www.instagram.com/reel/DJgqqhRv50W/",
    "fits": "Day trip from Fukuoka (~2.0 hrs each way)",
    "colour": "Green",
-   "photo": ""
+   "photo": "",
+   "about": "Kumamoto Castle, one of Japan's three great castles, partly still being restored after the 2016 quake."
   }
  ],
  "daytrip_km": 115.38461538461539

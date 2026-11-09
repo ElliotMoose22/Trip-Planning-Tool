@@ -52,3 +52,19 @@ def test_multi_place_reels_split_into_rows():
     assert [r.place for r in m] == ["Kumamoto Castle", "Mount Aso", "Ubud (Bali)"]
     assert all(r.rating == 9 and r.sender == "Elliot" for r in m)
     assert m[1].new and m[1].row == m[0].row + 1 and not m[0].new
+
+
+def test_cover_image_and_frames(tmp_path):
+    import shutil, subprocess
+    from triptool.reels import _frames, _og_image, thumb_data_url
+    html = '<head><meta property="og:image" content="https://cdn.example/x.jpg?a=1&amp;b=2" /></head>'
+    assert _og_image(html) == "https://cdn.example/x.jpg?a=1&b=2"
+    assert _og_image('<meta content="https://c/y.jpg" property="og:image">') == "https://c/y.jpg"
+    if not shutil.which("ffmpeg"):
+        return
+    video = str(tmp_path / "v.mp4")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=8:size=720x1280:rate=10", video], check=True)
+    frames = _frames(video, str(tmp_path / "f"))
+    assert len(frames) == 4
+    url = thumb_data_url(frames[0])
+    assert url.startswith("data:image/jpeg;base64,") and len(url) < 45100

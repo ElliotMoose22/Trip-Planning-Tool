@@ -340,7 +340,8 @@ def build_stays(plan: Plan, s: Settings, results: dict, store: Store, source: st
 
 def reels_json(plan) -> list[dict]:
     return [{"place": r.place, "country": r.country, "lat": r.lat, "lon": r.lon, "rating": r.rating,
-             "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data}
+             "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data,
+             "about": r.about}
             for r in ((getattr(plan, "reels", None) or ([], {}))[0]) if r.lat is not None]
 
 

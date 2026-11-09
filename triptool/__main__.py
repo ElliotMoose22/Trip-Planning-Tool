@@ -95,7 +95,7 @@ def handle_reels(plan: Plan, s: Settings, online: bool) -> None:
     plan.recs = getattr(plan, "recs", []) + idea_recs(rows, plan.stops, getattr(plan, "place_rows", None))
     placed = sum(1 for r in rows if r.colour)
     print(f"Reels: {len(rows)} in the sheet, {placed} placed"
-          + (f" ({stats['read']} read from captions, {stats['located']} located, {stats['photos']} photos)" if online else ""))
+          + (f" ({stats['watched']} watched, {stats['read']} read, {stats['located']} located, {stats['photos']} Wikipedia photos)" if online else ""))
 
 
 def run_searches(plan: Plan, s: Settings, store: Store, provider, today: dt.date, verbose=True) -> dict:

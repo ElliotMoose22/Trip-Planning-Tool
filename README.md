@@ -43,7 +43,7 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 | Live dashboard (for us) | [claude.ai dashboard](https://claude.ai/artifact/E3RwsDk8yCQNBTz4Pdi53U) | ✅ Reads Legs / Recommendations / Reels live through the Google Sheets connector |
 | Shared map (for Cat) | [GitHub Pages map](https://elliotmoose22.github.io/Trip-Planning-Tool/) | ✅ Route, recommendations, reel pins (green / yellow / red), day-trip rings, reel cards |
 | Instagram reels inbox | trip Instagram account → Meta app (dev mode, Unified login) → Apps Script in the sheet (`instagram/Code.gs`) → Reels tab | ✅ Working: real reels land in the Reels tab within seconds. The Apps Script URL verified directly, so `worker.js` isn't needed. |
-| Daily reel placement | `daily-reels.yml`, ~6:45pm | ⚠️ First run failed on missing secrets; reels were placed by hand from chat for now |
+| Nightly reel placement | `daily-reels.yml`, midnight Toronto | ⚠️ First run failed on missing secrets; reels were placed by hand from chat for now |
 
 ### To do before it runs on its own
 1. **Add `GOOGLE_SERVICE_ACCOUNT_JSON`** (GitHub secret). Steps under *Letting the weekly job edit the sheet* below.
@@ -60,7 +60,10 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 - **Instagram:** reels must be sent 1:1 to the trip account. Group chats aren't delivered by Instagram's API. The Meta app
   must stay in **Development mode**, and only Instagram Testers (trip account, Elliot, Cat) are delivered. A new sender
   = add them as a tester. New DMs from non-followers can sit in **Requests**; accept them.
-- **Caption reading** only sees the caption text, not the video or carousel photos. When a caption doesn't name the place, send
+- **Watching reels** needs Instagram to hand the video to GitHub's servers, which it often blocks; then only the
+  cover image is used, and if that's blocked too, a Wikipedia photo. Carousel posts give at most their first image.
+  Audio isn't listened to.
+- **Caption reading** sees the caption and up to 4 frames, not the whole video. When a caption doesn't name the place, send
   `8 Place, Place` instead of `8`. It uses your Claude Pro usage (small). It's not tested in GitHub Actions yet.
 - **Photos** (Wikipedia) and **geocoding** (OpenStreetMap) only run on GitHub. They're untested until the secrets are in; pins show a
   "photo arrives" placeholder meanwhile.
@@ -113,10 +116,13 @@ morning and saves `reports/latest.html` (the report) and `reports/plan.json` (da
 ## Instagram reels → trip ideas
 
 DM reels to the trip Instagram account and send a rating (1–10) after each one. An Apps Script in the
-sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every evening `daily-reels.yml` runs
+sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every night at midnight `daily-reels.yml` runs
 `python -m triptool reels`, which:
 
-1. reads the caption with Claude to work out every place it names (or uses the places you sent after the
+0. **watches the reel**: downloads it and takes 4 frames (or just its cover image when Instagram blocks the
+   download); the first frame becomes the photo on the map card,
+1. reads the caption **and the frames** with Claude to work out every place it shows or names, plus a one-line
+   **About** for the map card (or uses the places you sent after the
    rating, like `8 Kamakura, Enoshima`); a reel with several places becomes one row and pin per place,
 2. finds it on the map and grabs a photo from Wikipedia,
 3. sorts it against your stops: **green** = day trip (≤ 2.5 hrs, about 115 km) from a stop,

@@ -1,10 +1,12 @@
 """Reels: where each one is, and how it fits the route.
 
 Flow for each row of the Reels tab that isn't placed yet:
-  1. Place  - read from the caption by Claude (Claude Code on your subscription,
+  0. Watch  - download the reel and take 4 frames (or its cover image if Instagram won't give the video);
+              the first frame becomes the map photo.
+  1. Place  - read from the caption and frames by Claude, plus a one-line "About" for the map card (Claude Code on your subscription,
               CLAUDE_CODE_OAUTH_TOKEN), unless you've typed the Place yourself.
   2. Where  - coordinates from OpenStreetMap (Nominatim), unless Lat/Lon are filled.
-  3. Photo  - the place's Wikipedia image (shown in the sheet with =IMAGE and kept
+  3. Photo  - if the reel gave no image: the place's Wikipedia image (shown in the sheet with =IMAGE and kept
               as a small embedded copy for the dashboard, which can't load web images).
   4. Fit    - Green: day trip from a stop. Yellow: on the way between two stops, or
               an overnight trip from one. Red: doesn't fit the route.
@@ -47,6 +49,8 @@ class ReelRow:
     status: str
     photo: str = ""
     photo_data: str = ""
+    about: str = ""
+    media: list = field(default_factory=list)   # frame / cover image paths (not saved)
     # filled by classify()
     colour: str = ""
     fits: str = ""
@@ -74,7 +78,7 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
     c = {"received": col("received"), "from": col("from"), "link": col("reel link"), "caption": col("caption"),
          "rating": col("rating"), "place": col("place"), "country": col("country"), "lat": col("lat"),
          "lon": col("lon"), "fits": col("fits"), "colour": col("colour", "color"), "photo": col("photo"),
-         "status": col("status"), "photo_data": col("photo data")}
+         "status": col("status"), "photo_data": col("photo data"), "about": col("about")}
     if c["photo"] == c["photo_data"]:
         c["photo"] = next((i for i, v in enumerate(low) if v == "photo"), None)
     out = []
@@ -85,51 +89,161 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
         m = re.search(r"\d+", get("rating"))
         out.append(ReelRow(r, get("received"), get("from"), get("link"), get("caption"),
                            min(10, int(m.group())) if m else None, get("place"), get("country"),
-                           _num(get("lat")), _num(get("lon")), get("status"), get("photo"), get("photo_data")))
+                           _num(get("lat")), _num(get("lon")), get("status"), get("photo"), get("photo_data"),
+                           get("about")))
     return out, c
 
 
 # ---------- 1. read the place from the caption ----------
 
-PROMPT = """You read Instagram reel captions for a trip planner. The trip covers Japan, Thailand, Indonesia and Vietnam.
-For each caption, list every specific place someone could travel to that the caption names (attractions, beaches,
-islands, parks or towns), most important first, at most 6. Skip vague regions when a specific spot is named, and skip
-restaurants or shops unless that's all there is. Give each place's country. If a caption names no real place, give [].
+PROMPT = """You help plan a trip (Japan, Thailand, Indonesia, Vietnam) from Instagram reels a couple has saved.
+For each reel below you get its caption and, when available, a few frames from the video (image files in the
+current folder: open them with the Read tool and look at landmarks, signs and on-screen text).
+For each reel:
+- "places": every specific place someone could travel to that the reel shows or names (attractions, beaches,
+  islands, parks or towns), most important first, at most 6, each with its country. Skip vague regions when a
+  specific spot is named; skip restaurants or shops unless that's all there is. Use [] if you can't tell.
+- "about": one short sentence (max 20 words) on what the reel shows and why it's worth going, for a map card.
 Answer with JSON only, no prose:
-[{"i": <number>, "places": [{"place": "<name as a map would know it>", "country": "<country>"}]}]
+[{"i": <number>, "places": [{"place": "<name as a map would know it>", "country": "<country>"}], "about": "<sentence>"}]
 
-Captions:
+Reels:
 """
 
 
-def extract_places(rows: list[ReelRow]) -> int:
-    """Fill .place/.country from captions with Claude Code. Returns how many were filled."""
-    todo = [r for r in rows if not r.place and r.caption]
+def _claude(prompt: str, cwd: str | None = None) -> str:
+    env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"].strip()}
+    cmd = ["claude", "-p", prompt, "--output-format", "json"] + (["--allowedTools", "Read"] if cwd else [])
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env, cwd=cwd).stdout
+    return json.loads(out).get("result", "")
+
+
+def extract_places(rows: list[ReelRow], batch: int = 5) -> int:
+    """Fill .place/.country/.about with Claude Code from each new reel's caption and video frames.
+    A Place you typed yourself is kept; Claude then only writes the 'About' line."""
+    todo = [r for r in rows if r.lat is None and (not r.place or not r.about) and (r.caption or r.media)]
     if not todo or not shutil.which("claude") or not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         return 0
-    prompt = PROMPT + "\n".join(f"{i}. {r.caption[:600]}" for i, r in enumerate(todo))
-    try:
-        env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"].strip()}
-        out = subprocess.run(["claude", "-p", prompt, "--output-format", "json"], capture_output=True,
-                             text=True, timeout=300, env=env).stdout
-        text = json.loads(out).get("result", "")
-        answer = json.loads(re.search(r"\[.*\]", text, re.S).group())
-    except Exception as e:  # never sink the weekly run over this
-        print(f"  ! reading captions failed: {e}")
-        return 0
     n = 0
-    for a in answer:
-        i = a.get("i")
-        found = [p for p in (a.get("places") or []) if isinstance(p, dict) and p.get("place")]
-        if not found and a.get("place"):
-            found = [{"place": a["place"], "country": a.get("country")}]
-        if isinstance(i, int) and 0 <= i < len(todo) and found:
-            names = [str(p["place"]).replace(",", " ").replace(";", " ").strip() for p in found[:6]]
-            countries = {p.get("country") or "" for p in found}
-            todo[i].place = "; ".join(names)
-            todo[i].country = countries.pop() if len(countries) == 1 else (found[0].get("country") or "")
-            todo[i].changed = True
-            n += 1
+    for k in range(0, len(todo), batch):
+        part = todo[k:k + batch]
+        lines, cwd = [], None
+        for i, r in enumerate(part):
+            imgs = [os.path.basename(m) for m in r.media]
+            if imgs:
+                cwd = os.path.dirname(r.media[0])
+            lines.append(f"{i}. Caption: {r.caption[:600] or '(none)'}" + (f"\n   Frames: {', '.join(imgs)}" if imgs else ""))
+        try:
+            text = _claude(PROMPT + "\n".join(lines), cwd)
+            answer = json.loads(re.search(r"\[.*\]", text, re.S).group())
+        except Exception as e:  # never sink the run over this
+            print(f"  ! reading reels failed: {e}")
+            continue
+        for a in answer:
+            i = a.get("i")
+            if not (isinstance(i, int) and 0 <= i < len(part)):
+                continue
+            r = part[i]
+            if a.get("about") and not r.about:
+                r.about, r.changed = str(a["about"]).strip()[:200], True
+            found = [p for p in (a.get("places") or []) if isinstance(p, dict) and p.get("place")]
+            if found and not r.place:
+                names = [str(p["place"]).replace(",", " ").replace(";", " ").strip() for p in found[:6]]
+                countries = {p.get("country") or "" for p in found}
+                r.place = "; ".join(names)
+                r.country = countries.pop() if len(countries) == 1 else (found[0].get("country") or "")
+                r.changed = True
+                n += 1
+    return n
+
+
+# ---------- 0. watch the reel: a few frames + its cover ----------
+
+MEDIA_DIR = os.environ.get("REELS_MEDIA_DIR", "/tmp/reels-media")
+
+
+def _og_image(html: str) -> str | None:
+    m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)', html) or \
+        re.search(r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image', html)
+    return m.group(1).replace("&amp;", "&") if m else None
+
+
+def _frames(video: str, out_prefix: str, n: int = 4) -> list[str]:
+    """n evenly spaced frames, 480 px wide."""
+    try:
+        dur = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video],
+                                   capture_output=True, text=True, timeout=60).stdout.strip() or 0)
+    except Exception:
+        dur = 0
+    paths = []
+    for j in range(n):
+        t = dur * (j + 0.5) / n if dur else j * 3
+        path = f"{out_prefix}_{j + 1}.jpg"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", video, "-frames:v", "1",
+                        "-vf", "scale=480:-2", path], capture_output=True, timeout=60)
+        if os.path.exists(path) and os.path.getsize(path) > 0:
+            paths.append(path)
+    return paths
+
+
+def thumb_data_url(path: str, width: int = 360, limit: int = 45000) -> str:
+    """A small JPEG as a data: URL that fits in one sheet cell (the dashboard can't load web images)."""
+    from io import BytesIO
+    from PIL import Image
+    im = Image.open(path).convert("RGB")
+    im.thumbnail((width, width * 2))
+    for q in (72, 60, 48, 36):
+        buf = BytesIO()
+        im.save(buf, "JPEG", quality=q, optimize=True)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        if len(b64) < limit:
+            return "data:image/jpeg;base64," + b64
+        im.thumbnail((int(im.width * 0.8), int(im.height * 0.8)))
+    return ""
+
+
+def fetch_media(rows: list[ReelRow], session=None) -> int:
+    """For each new reel: download it and grab a few frames (yt-dlp + ffmpeg); if Instagram won't hand over
+    the video, fall back to the reel's cover image. The first frame / cover becomes the map photo."""
+    import requests
+    s = session or requests.Session()
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    n = 0
+    for idx, r in enumerate(rows):
+        if r.lat is not None or not r.link.startswith("http") or "/reel/sample" in r.link or r.link.endswith("/test"):
+            continue
+        prefix = os.path.join(MEDIA_DIR, f"reel{r.row}")
+        try:
+            import yt_dlp
+            opts = {"outtmpl": prefix + ".%(ext)s", "format": "worst[ext=mp4]/worst", "quiet": True,
+                    "no_warnings": True, "max_filesize": 60_000_000, "socket_timeout": 30}
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(r.link, download=True)
+                video = ydl.prepare_filename(info)
+            r.media = _frames(video, prefix)
+            if not r.caption and info.get("description"):
+                r.caption, r.changed = info["description"][:1500], True
+        except Exception as e:
+            print(f"  · video for row {r.row + 1} not available ({str(e)[:80]}); trying its cover image")
+        if not r.media:
+            try:
+                html = s.get(r.link, headers={"User-Agent": "facebookexternalhit/1.1"}, timeout=30).text
+                url = _og_image(html)
+                if url:
+                    path = prefix + "_cover.jpg"
+                    with open(path, "wb") as f:
+                        f.write(s.get(url, headers={"User-Agent": UA}, timeout=30).content)
+                    r.media = [path]
+            except Exception as e:
+                print(f"  · cover for row {r.row + 1} not available: {e}")
+        if r.media and not r.photo_data:
+            try:
+                r.photo_data = thumb_data_url(r.media[0])
+                if r.photo_data:
+                    r.photo, r.changed = "From the reel", True
+            except Exception as e:
+                print(f"  · couldn't shrink the photo for row {r.row + 1}: {e}")
+        n += bool(r.media)
     return n
 
 
@@ -153,6 +267,7 @@ def split_places(rows: list[ReelRow]) -> int:
         for n in names[1:]:
             extra = ReelRow(nxt, r.received, r.sender, r.link, "↳ same reel as the row above",
                             r.rating, n, r.country, None, None, "From a multi-place reel")
+            extra.about, extra.photo, extra.photo_data = r.about, r.photo, r.photo_data
             extra.changed, extra.new = True, True
             new.append(extra)
             nxt += 1
@@ -348,7 +463,7 @@ def write_back(rows: list[ReelRow], cols: dict[str, int], tab: str = "Reels") ->
             continue
         vals = {"place": r.place, "country": r.country, "lat": r.lat if r.lat is not None else "",
                 "lon": r.lon if r.lon is not None else "", "fits": r.fits, "colour": r.colour,
-                "photo": r.photo, "photo_data": r.photo_data,
+                "photo": r.photo, "photo_data": r.photo_data, "about": r.about,
                 "status": r.status if r.status and not r.colour else ("Placed" if r.colour else r.status)}
         if r.new:
             vals.update({"received": r.received, "from": r.sender, "link": r.link, "caption": r.caption,
@@ -365,8 +480,9 @@ def ideas_update(rows: list[list], tab: str = "Ideas", max_rows: int = 190) -> l
 
 
 def process(rows: list[ReelRow], stops: list[Stop], daytrip_hours: float = 2.5, online: bool = True) -> dict:
-    stats = {"read": 0, "located": 0, "photos": 0}
+    stats = {"read": 0, "located": 0, "photos": 0, "watched": 0}
     if online:
+        stats["watched"] = fetch_media(rows)
         stats["read"] = extract_places(rows)
     stats["split"] = split_places(rows)
     if online:

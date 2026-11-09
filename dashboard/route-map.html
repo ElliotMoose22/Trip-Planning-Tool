@@ -267,7 +267,7 @@
         if (!at(r, 'place') || !Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
         const photo = photoCol >= 0 ? String(r[photoCol] ?? '') : '';
         rows.push({ id: `r${i}`, place: at(r, 'place'), country: at(r, 'country'), lat, lon, rating: Number(at(r, 'rating')) || null,
-                    sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'),
+                    sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'), about: at(r, 'about'),
                     photo: photo.startsWith('data:image/') ? photo : '' });
       });
       return rows;
@@ -401,6 +401,7 @@
       const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
       add('div', 'kicker', `Reel · sent by ${R.sender || 'one of you'}`);
       add('div', 'route', R.place);
+      if (R.about) { const ab = add('p', null, R.about); ab.style.margin = '0 0 4px'; ab.style.color = 'var(--color-fg-muted)'; ab.style.fontSize = 'var(--cds-font-size-caption)'; }
       if (R.photo) { const img = add('img', 'reel-photo'); img.src = R.photo; img.alt = R.place; }
       else add('div', 'reel-nophoto', 'Photo arrives with the next weekly check');
       const line = add('p', null); line.style.margin = '6px 0 0';
