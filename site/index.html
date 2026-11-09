@@ -45,6 +45,19 @@
   .reel-photo { object-fit: cover; background: var(--line); }
   .reel-nophoto { display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,.04); color: var(--muted); font-size: 12px; }
   .dot { display:inline-block; width:10px; height:10px; border-radius:2px; transform: rotate(45deg); margin-right:6px; }
+  .clouds { position:absolute; inset:0; z-index:20; pointer-events:none; overflow:hidden; opacity:0; }
+  .clouds.show { opacity:1; }
+  .clouds .veil { position:absolute; inset:0; background: radial-gradient(ellipse at 50% 50%, rgba(214,222,236,.96), rgba(170,184,206,.92) 60%, rgba(120,136,162,.85));
+                  opacity:0; transition: opacity .42s ease; }
+  .clouds.cover .veil { opacity:1; transition-delay:.18s; }
+  .clouds .puff { position:absolute; border-radius:50%; filter: blur(18px);
+                  background: radial-gradient(circle at 40% 38%, rgba(255,255,255,.98), rgba(226,232,242,.92) 45%, rgba(190,202,222,0) 72%);
+                  transform: translate(var(--fx), var(--fy)) scale(.35); opacity:0;
+                  transition: transform .7s cubic-bezier(.2,.7,.2,1), opacity .5s ease; transition-delay: var(--d); }
+  .clouds.cover .puff { transform: translate(0, 0) scale(1); opacity:1; }
+  .clouds.clear .puff { transform: translate(var(--tx), var(--ty)) scale(1.5); opacity:0; transition-duration: .9s, .8s; }
+  .clouds.clear .veil { opacity:0; transition: opacity .55s ease; }
+  @media (prefers-reduced-motion: reduce) { .clouds .puff { display:none; } .clouds .veil { transition-duration:.2s !important; transition-delay:0s !important; } }
   .city { position:absolute; inset:0; background:#0b111c; display:none; touch-action:none; }
   .city.on { display:block; }
   .city canvas { display:block; cursor: grab; } .city canvas.dragging { cursor: grabbing; } .city canvas.over { cursor: pointer; }
@@ -126,6 +139,7 @@
         <span class="lr g"><i></i>Reel: day trip</span><span class="lr y"><i></i>Reel: needs a night</span>
         <span class="lr r"><i></i>Reel: off the route</span><span class="lring"><i></i>Day-trip range</span>
       </div>
+      <div class="clouds" id="clouds" aria-hidden="true"><div class="veil"></div></div>
       <div class="city" id="city" aria-label="Street map">
         <div class="cbar">
           <button type="button" id="c-back">← Globe</button>
@@ -462,6 +476,35 @@
     else City.open(hit.pin.lon, hit.pin.lat, 10, hit.pin.name);
   });
 
+  // ---- clouds: cover the view, swap globe <-> street map underneath, then drift apart ----
+  const Clouds = (() => {
+    const el = document.getElementById('clouds');
+    for (let i = 0; i < 18; i++) {
+      const p = document.createElement('div'); p.className = 'puff';
+      const ang = Math.random() * 2 * Math.PI, size = 38 + Math.random() * 46;
+      const cxp = 50 + Math.cos(ang) * (8 + Math.random() * 38), cyp = 50 + Math.sin(ang) * (8 + Math.random() * 34);
+      p.style.cssText = `width:${size}%;height:${size * 0.75}%;left:${cxp - size / 2}%;top:${cyp - size * 0.375}%;` +
+        `--fx:${Math.cos(ang) * 70}%;--fy:${Math.sin(ang) * 70}%;--tx:${Math.cos(ang + 0.6) * 90}%;--ty:${Math.sin(ang + 0.6) * 90}%;--d:${(Math.random() * 0.22).toFixed(2)}s`;
+      el.appendChild(p);
+    }
+    let busy = false;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function swap(fn) {
+      if (busy) return fn();
+      busy = true;
+      try {
+        el.classList.remove('clear'); el.classList.add('show'); void el.offsetWidth;
+        el.classList.add('cover');
+        await wait(G.reduce ? 200 : 650);
+        fn();
+        await wait(G.reduce ? 80 : 260);
+        el.classList.add('clear'); el.classList.remove('cover');
+        await wait(G.reduce ? 200 : 950);
+      } finally { el.classList.remove('show', 'clear'); busy = false; }
+    }
+    return { swap, busy: () => busy };
+  })();
+
   // ---- street map: dark web tiles, pins, day-trip rings, reels clustered when they crowd ----
   const City = (() => {
     const box = document.getElementById('city'), cv = document.createElement('canvas'), cx = cv.getContext('2d');
@@ -568,15 +611,28 @@
       if (hh.reel) pickReel(hh.reel, true);
       else { const ll = proj().invert([hh.x, hh.y]); goto(ll[0], ll[1], Math.min(18, zoomOf(S.t.k) + 2), true); }
     });
-    function open(lon, lat, z, name) {
+    function show(lon, lat, z, name) {
       S.open = true; box.classList.add('on'); size();
       document.getElementById('c-name').textContent = name || '';
       goto(lon, lat, z || 11, false); paint();
       Map3D.open(lon, lat, z || 11);                 // upgrades to the 3D street map when it loads
     }
+    function open(lon, lat, z, name) {
+      if (S.open) return show(lon, lat, z, name);    // already on the street map: just move
+      if (Clouds.busy()) return;
+      S.open = true;                                 // block re-entry while the globe dives in
+      const dive = G.k < GLOBE_MAX * 0.8 && !G.reduce;
+      if (dive) G.flyTo(lon, lat, GLOBE_MAX * 0.85);  // dive towards the spot, then clouds
+      setTimeout(() => Clouds.swap(() => show(lon, lat, z, name)), dive ? 420 : 0);
+    }
     function close() {
-      if (!S.open) return; S.open = false; box.classList.remove('on'); ctip.hidden = true;
-      if (G.k >= GLOBE_MAX * 0.9) G.setK(GLOBE_MAX * 0.6);
+      if (!S.open || Clouds.busy()) return;
+      const c = Map3D.active() ? Map3D.center() : proj().invert([S.w / 2, S.h / 2]);
+      Clouds.swap(() => {
+        S.open = false; box.classList.remove('on'); ctip.hidden = true;
+        G.rot = [-c[0], -c[1], 0]; G.setK(GLOBE_MAX * 0.75);
+        setTimeout(() => G.flyTo(c[0], c[1], Math.max(2.4, GLOBE_MAX * 0.25)), 250);   // pull back out to the globe
+      });
     }
     document.getElementById('c-back').onclick = close;
     document.getElementById('c-in').onclick = () => Map3D.active() ? Map3D.zoomBy(1) : d3.select(cv).transition().duration(250).call(zb.scaleBy, 2);
@@ -675,6 +731,7 @@
     new ResizeObserver(() => { if (ready) map.resize(); }).observe(box);
     return {
       open, active: () => ready && box.classList.contains('three'),
+      center: () => { const c = map.getCenter(); return [c.lng, c.lat]; },
       zoomBy: (d) => { if (d < 0 && map.getZoom() <= 5) return document.getElementById('c-back').click(); map.easeTo({ zoom: map.getZoom() + d }); },
       refresh: () => { if (ready) map.getSource('reels').setData(reelsFC()); },
     };
