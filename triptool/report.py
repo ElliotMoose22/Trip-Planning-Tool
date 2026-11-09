@@ -339,10 +339,20 @@ def build_stays(plan: Plan, s: Settings, results: dict, store: Store, source: st
 
 
 def reels_json(plan) -> list[dict]:
-    return [{"place": r.place, "country": r.country, "lat": r.lat, "lon": r.lon, "rating": r.rating,
-             "sender": r.sender, "link": r.link, "fits": r.fits, "colour": r.colour, "photo": r.photo_data,
-             "about": r.about}
-            for r in ((getattr(plan, "reels", None) or ([], {}))[0]) if r.lat is not None]
+    from .reels import all_spots
+    rows = (getattr(plan, "reels", None) or ([], {}))[0]
+    out = []
+    for r in rows:
+        if r.dup:
+            continue
+        group = [r] + r.spots
+        for i, sp in enumerate(all_spots([r])):
+            if sp.lat is None:
+                continue
+            out.append({"place": sp.place, "country": sp.country, "lat": sp.lat, "lon": sp.lon, "rating": r.rating,
+                        "sender": r.sender, "link": r.link, "fits": sp.fits, "colour": sp.colour,
+                        "photo": r.photo_data, "about": r.about, "spot": i + 1, "spots": len(group)})
+    return out
 
 
 def update_plan_reels(plan, path: str = "reports/plan.json") -> int:

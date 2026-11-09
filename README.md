@@ -63,6 +63,8 @@ guess, marked *assumed*, and listed so you can fix it in the sheet.
 - **Watching reels** needs Instagram to hand the video to GitHub's servers, which it often blocks; then only the
   cover image is used, and if that's blocked too, a Wikipedia photo. Carousel posts give at most their first image.
   Audio isn't listened to.
+- **One row per reel:** the same reel sent twice (even with a different link ending) is kept once; extra rows
+  for a reel are folded into its Other spots on the next run.
 - **Caption reading** sees the caption and up to 4 frames, not the whole video. When a caption doesn't name the place, send
   `8 Place, Place` instead of `8`. It uses your Claude Pro usage (small). It's not tested in GitHub Actions yet.
 - **Photos** (Wikipedia) and **geocoding** (OpenStreetMap) only run on GitHub. They're untested until the secrets are in; pins show a
@@ -121,7 +123,8 @@ sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every night at 
    download); the first frame becomes the photo on the map card,
 1. reads the caption **and the frames** with Claude to work out every place it shows or names, plus a one-line
    **About** for the map card (or uses the places you sent after the
-   rating, like `8 Kamakura, Enoshima`); a reel with several places becomes one row and pin per place,
+   rating, like `8 Kamakura, Enoshima`); a reel with several places stays **one row** (main place in Place,
+   the rest in **Other spots**) but every spot gets its own pin on the map,
 2. finds it on the map and grabs a photo from Wikipedia,
 3. sorts it against your stops: **green** = day trip (≤ 2.5 hrs, about 115 km) from a stop,
    **yellow** = needs a night (on the way between two stops, or a short overnight from one),

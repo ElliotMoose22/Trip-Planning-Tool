@@ -60,6 +60,26 @@ class ReelRow:
     hours: float | None = None
     changed: bool = False
     new: bool = False
+    spots: list = field(default_factory=list)   # the reel's other places (ReelRow objects with row = -1)
+    dup: bool = False                            # a second row for a reel that's already in the sheet: cleared
+
+
+def _spot(parent: "ReelRow", place: str, country: str = "", **kw) -> "ReelRow":
+    s = ReelRow(-1, parent.received, parent.sender, parent.link, "", parent.rating, place, country or parent.country,
+                kw.get("lat"), kw.get("lon"), "")
+    s.about, s.photo_data, s.colour, s.fits = parent.about, parent.photo_data, kw.get("colour", ""), kw.get("fits", "")
+    return s
+
+
+def all_spots(rows: list["ReelRow"]):
+    """Every place on the map: each reel's main place, then its other spots."""
+    for r in rows:
+        if r.dup:
+            continue
+        yield r
+        for s in r.spots:
+            s.sender, s.rating, s.link, s.about, s.photo_data = r.sender, r.rating, r.link, r.about, r.photo_data
+            yield s
 
 
 def _num(v: str) -> float | None:
@@ -78,7 +98,8 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
     c = {"received": col("received"), "from": col("from"), "link": col("reel link"), "caption": col("caption"),
          "rating": col("rating"), "place": col("place"), "country": col("country"), "lat": col("lat"),
          "lon": col("lon"), "fits": col("fits"), "colour": col("colour", "color"), "photo": col("photo"),
-         "status": col("status"), "photo_data": col("photo data"), "about": col("about")}
+         "status": col("status"), "photo_data": col("photo data"), "about": col("about"),
+         "other": col("other spots"), "spots_data": col("spots data")}
     if c["photo"] == c["photo_data"]:
         c["photo"] = next((i for i, v in enumerate(low) if v == "photo"), None)
     out = []
@@ -91,7 +112,37 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
                            min(10, int(m.group())) if m else None, get("place"), get("country"),
                            _num(get("lat")), _num(get("lon")), get("status"), get("photo"), get("photo_data"),
                            get("about")))
+        try:
+            for d in json.loads(get("spots_data") or "[]"):
+                out[-1].spots.append(_spot(out[-1], d.get("place", ""), d.get("country", ""), lat=d.get("lat"),
+                                           lon=d.get("lon"), colour=d.get("colour", ""), fits=d.get("fits", "")))
+        except (ValueError, AttributeError):
+            pass
+    merge_duplicates(out)
     return out, c
+
+
+def merge_duplicates(rows: list[ReelRow]) -> int:
+    """One row per reel: a later row with the same link becomes one of the first row's other spots
+    (if it names a different place) and is cleared from the sheet."""
+    first: dict[str, ReelRow] = {}
+    n = 0
+    for r in rows:
+        key = re.sub(r"[?#].*$", "", r.link).rstrip("/").lower()
+        if not key:
+            continue
+        if key not in first:
+            first[key] = r
+            continue
+        keep = first[key]
+        known = {keep.place.lower()} | {s.place.lower() for s in keep.spots}
+        if r.place and r.place.lower() not in known:
+            keep.spots.append(_spot(keep, r.place, r.country, lat=r.lat, lon=r.lon, colour=r.colour, fits=r.fits))
+        if r.rating and not keep.rating:
+            keep.rating = r.rating
+        r.dup = keep.changed = True
+        n += 1
+    return n
 
 
 # ---------- 1. read the place from the caption ----------
@@ -159,10 +210,14 @@ def extract_places(rows: list[ReelRow], batch: int = 5) -> int:
                 r.about, r.changed = str(a["about"]).strip()[:200], True
             found = [p for p in (a.get("places") or []) if isinstance(p, dict) and p.get("place")]
             if found and not r.place:
-                names = [str(p["place"]).replace(",", " ").replace(";", " ").strip() for p in found[:6]]
-                countries = {p.get("country") or "" for p in found}
-                r.place = "; ".join(names)
-                r.country = countries.pop() if len(countries) == 1 else (found[0].get("country") or "")
+                r.place = str(found[0]["place"]).strip()
+                r.country = found[0].get("country") or ""
+                known = {r.place.lower()}
+                for p in found[1:6]:
+                    name = str(p["place"]).strip()
+                    if name.lower() not in known:
+                        r.spots.append(_spot(r, name, p.get("country") or r.country))
+                        known.add(name.lower())
                 r.changed = True
                 n += 1
     return n
@@ -283,37 +338,32 @@ def is_region(name: str, session=None) -> bool:
 
 
 def split_places(rows: list[ReelRow], online: bool = False) -> int:
-    """A reel naming several places ("Kamakura, Enoshima") becomes one row per place: the first stays on
-    the reel's row, the rest are added as new rows under the table with the same link, sender and rating.
+    """A reel naming several places ("Kamakura, Enoshima") stays one row: the first place goes in Place,
+    the rest become its other spots (each still gets its own pin on the map).
     Write a region in brackets to keep it with its place: "Ubud (Bali)"."""
-    new, nxt = [], max((r.row for r in rows), default=0) + 1
+    n = 0
     for r in rows:
-        if r.lat is not None or not r.place:
+        if r.dup or r.lat is not None or not r.place:
             continue
-        names = [n for n in SPLIT.split(r.place) if n]
+        names = [x for x in SPLIT.split(r.place) if x]
         if len(names) < 2:
             continue
         if online:   # "Teshima, Kagawa": the prefecture belongs to the place before it
             merged = []
-            for n in names:
-                if merged and is_region(n):
-                    merged[-1] = f"{merged[-1]} ({n})" if "(" not in merged[-1] else merged[-1]
+            for x in names:
+                if merged and is_region(x):
+                    merged[-1] = f"{merged[-1]} ({x})" if "(" not in merged[-1] else merged[-1]
                 else:
-                    merged.append(n)
+                    merged.append(x)
             names = merged
-            if len(names) < 2:
-                r.place, r.changed = names[0], True
-                continue
         r.place, r.changed = names[0], True
-        for n in names[1:]:
-            extra = ReelRow(nxt, _clean_date(r.received), r.sender, r.link, "↳ same reel as the row above",
-                            r.rating, n, r.country, None, None, "From a multi-place reel")
-            extra.about, extra.photo, extra.photo_data = r.about, r.photo, r.photo_data
-            extra.changed, extra.new = True, True
-            new.append(extra)
-            nxt += 1
-    rows.extend(new)
-    return len(new)
+        known = {r.place.lower()} | {sp.place.lower() for sp in r.spots}
+        for x in names[1:]:
+            if x.lower() not in known:
+                r.spots.append(_spot(r, x))
+                known.add(x.lower())
+                n += 1
+    return n
 
 
 def _clean_date(v: str) -> str:
@@ -329,21 +379,48 @@ def _clean_date(v: str) -> str:
 
 # ---------- 2. coordinates ----------
 
+def geocode_queries(place: str, country: str = "") -> list[str]:
+    """Most specific first: 'Oikawa Falls (Kinko, Kagoshima)' -> full, 'Oikawa Falls, Kagoshima',
+    'Oikawa Falls', then the area alone as a last resort is NOT used (it would pin the wrong spot)."""
+    place = re.sub(r"\s{2,}", ", ", place.strip())
+    base = re.sub(r"\s*\(.*?\)", "", place).strip()
+    inside = [x.strip() for x in ",".join(re.findall(r"\((.*?)\)", place)).split(",") if x.strip()]
+    latin = re.sub(r"[^\x00-\x7F]+", " ", base).strip()
+    native = re.sub(r"[\x00-\x7F]+", " ", base).strip()
+    tail = f", {country}" if country else ""
+    qs = [", ".join([base] + inside) + tail]
+    if inside:
+        qs += [f"{base}, {inside[-1]}{tail}", f"{base}, {inside[0]}{tail}"]
+    qs += [base + tail]
+    if latin and latin != base:
+        qs += [", ".join([latin] + inside[-1:]) + tail]
+    if native and native != base:
+        qs += [", ".join([native] + inside[-1:]) + tail]
+    out = []
+    for q in qs:
+        q = re.sub(r"\s+", " ", q).strip(" ,")
+        if q and q not in out:
+            out.append(q)
+    return out
+
+
 def geocode(rows: list[ReelRow], session=None) -> int:
     import requests
     s = session or requests.Session()
     n = 0
-    for r in rows:
+    for r in list(all_spots(rows)):
         if r.place and (r.lat is None or r.lon is None):
-            name = re.sub(r"\s*\((.*?)\)", r", \1", r.place)
-            q = f"{name}, {r.country}" if r.country else name
-            try:
-                res = s.get("https://nominatim.openstreetmap.org/search", params={"q": q, "format": "json", "limit": 1,
-                            "accept-language": "en", "addressdetails": 1}, headers={"User-Agent": UA}, timeout=30).json()
-            except Exception as e:
-                print(f"  ! geocoding {q}: {e}")
-                continue
-            time.sleep(1.1)   # Nominatim asks for at most one request a second
+            res = None
+            for q in geocode_queries(r.place, r.country):
+                try:
+                    res = s.get("https://nominatim.openstreetmap.org/search", params={"q": q, "format": "json", "limit": 1,
+                                "accept-language": "en", "addressdetails": 1}, headers={"User-Agent": UA}, timeout=30).json()
+                except Exception as e:
+                    print(f"  ! geocoding {q}: {e}")
+                    res = None
+                time.sleep(1.1)   # Nominatim asks for at most one request a second
+                if res:
+                    break
             if res:
                 r.lat, r.lon = float(res[0]["lat"]), float(res[0]["lon"])
                 r.country = r.country or res[0].get("address", {}).get("country", "")
@@ -442,6 +519,7 @@ def classify(r: ReelRow, stops: list[Stop], daytrip_hours: float = 2.5, flown: s
 
 def ideas_rows(rows: list[ReelRow], stops: list[Stop]) -> list[list]:
     """Country | Stop | Idea | Rating | Sent by | How it fits | Distance | Reel"""
+    rows = list(all_spots(rows))
     placed = [r for r in rows if r.colour]
     by_rating = lambda r: -(r.rating or 0)
     line = lambda r: ["", "", r.place, r.rating or "", r.sender, r.fits,
@@ -477,6 +555,7 @@ def ideas_rows(rows: list[ReelRow], stops: list[Stop]) -> list[list]:
 
 def idea_recs(rows: list[ReelRow], stops: list[Stop], places=None) -> list[Rec]:
     """Recommendations for reels that need a change to the plan."""
+    rows = list(all_spots(rows))
     nights = {}
     mins = {}
     for pr in (places or []):
@@ -512,19 +591,27 @@ def idea_recs(rows: list[ReelRow], stops: list[Stop], places=None) -> list[Rec]:
 def write_back(rows: list[ReelRow], cols: dict[str, int], tab: str = "Reels") -> list[dict]:
     from .writeback import col_letter
     data = []
+    put = lambda k, r, v: data.append({"range": f"'{tab}'!{col_letter(cols[k])}{r.row + 1}", "values": [[v]]}) \
+        if cols.get(k) is not None else None
     for r in rows:
+        if r.dup:                      # second copy of a reel already in the sheet: empty the row
+            for k in cols:
+                put(k, r, "")
+            continue
         if not (r.changed or r.colour):
             continue
         vals = {"place": r.place, "country": r.country, "lat": r.lat if r.lat is not None else "",
                 "lon": r.lon if r.lon is not None else "", "fits": r.fits, "colour": r.colour,
                 "photo": r.photo, "photo_data": r.photo_data, "about": r.about,
-                "status": r.status if r.status and not r.colour else ("Placed" if r.colour else r.status)}
-        if r.new:
-            vals.update({"received": r.received, "from": r.sender, "link": r.link, "caption": r.caption,
-                         "rating": r.rating or ""})
+                "status": r.status if r.status and not r.colour else ("Placed" if r.colour else r.status),
+                "rating": r.rating or "",
+                "other": "\n".join(f"{sp.place} — {sp.colour or 'not placed'}" for sp in r.spots),
+                "spots_data": json.dumps([{"place": sp.place, "country": sp.country, "lat": sp.lat, "lon": sp.lon,
+                                           "colour": sp.colour, "fits": sp.fits} for sp in r.spots],
+                                         ensure_ascii=False) if r.spots else ""}
         for k, v in vals.items():
-            if cols.get(k) is not None and (v != "" or k in ("fits", "colour", "status")):
-                data.append({"range": f"'{tab}'!{col_letter(cols[k])}{r.row + 1}", "values": [[v]]})
+            if v != "" or k in ("fits", "colour", "status", "other", "spots_data"):
+                put(k, r, v)
     return data
 
 
@@ -543,6 +630,6 @@ def process(rows: list[ReelRow], stops: list[Stop], daytrip_hours: float = 2.5, 
     if online:
         stats["located"] = geocode(rows)
         stats["photos"] = fetch_photos(rows)
-    for r in rows:
+    for r in all_spots(rows):
         classify(r, stops, daytrip_hours, flown)
     return stats

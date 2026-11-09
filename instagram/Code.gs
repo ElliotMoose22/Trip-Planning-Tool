@@ -96,7 +96,8 @@ function addReel_(who, p) {
   // first empty row under the header (ignores the sample rows' status note)
   const last = Math.max(sh.getLastRow(), HEADER_ROW);
   const links = last > HEADER_ROW ? sh.getRange(HEADER_ROW + 1, col('reel link'), last - HEADER_ROW, 1).getValues() : [];
-  if (link && links.some((r) => String(r[0]) === link)) return;          // already in the sheet
+  const norm = (u) => String(u).replace(/[?#].*$/, '').replace(/\/+$/, '').toLowerCase();
+  if (link && links.some((r) => norm(r[0]) === norm(link))) return;       // already in the sheet (same reel)
   let row = HEADER_ROW + 1 + links.findIndex((r) => !String(r[0]).trim());
   if (row <= HEADER_ROW) row = last + 1;
   const put = (name, v) => { const c = col(name); if (c) sh.getRange(row, c).setValue(v); };

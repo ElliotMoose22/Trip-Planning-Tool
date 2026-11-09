@@ -263,12 +263,20 @@
       const photoCol = h.findIndex((x) => x === 'photo data');
       const rows = [];
       values.slice(head + 1).forEach((r, i) => {
-        const lat = Number(at(r, 'lat')), lon = Number(at(r, 'lon'));
-        if (!at(r, 'place') || !Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+        if (!at(r, 'place')) return;
         const photo = photoCol >= 0 ? String(r[photoCol] ?? '') : '';
-        rows.push({ id: `r${i}`, place: at(r, 'place'), country: at(r, 'country'), lat, lon, rating: Number(at(r, 'rating')) || null,
-                    sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'), about: at(r, 'about'),
-                    photo: photo.startsWith('data:image/') ? photo : '' });
+        const sd = h.findIndex((x) => x === 'spots data');
+        let extra = [];
+        try { extra = sd >= 0 && r[sd] ? JSON.parse(r[sd]) : []; } catch (e) { extra = []; }
+        const base = { place: at(r, 'place'), country: at(r, 'country'), rating: Number(at(r, 'rating')) || null,
+                       sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'), about: at(r, 'about'),
+                       photo: photo.startsWith('data:image/') ? photo : '', spots: extra.length + 1 };
+        const ok = (la, lo) => Number.isFinite(la) && Number.isFinite(lo) && !(la === 0 && lo === 0);
+        const lat = parseFloat(at(r, 'lat')), lon = parseFloat(at(r, 'lon'));
+        if (ok(lat, lon)) rows.push({ ...base, id: `r${i}`, lat, lon, spot: 1 });
+        extra.forEach((x, k) => { const la = parseFloat(x.lat), lo = parseFloat(x.lon);
+          if (ok(la, lo)) rows.push({ ...base, id: `r${i}s${k}`, place: x.place, country: x.country || base.country,
+                                      lat: la, lon: lo, fits: x.fits || '', colour: x.colour || '', spot: k + 2 }); });
       });
       return rows;
     },
@@ -399,7 +407,7 @@
     const R = window.tripMap.reel;
     if (R) {
       const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
-      add('div', 'kicker', `Reel · sent by ${R.sender || 'one of you'}`);
+      add('div', 'kicker', `Reel · sent by ${R.sender || 'one of you'}${R.spots > 1 ? ` · spot ${R.spot} of ${R.spots}` : ''}`);
       add('div', 'route', R.place);
       if (R.about) { const ab = add('p', null, R.about); ab.style.margin = '0 0 4px'; ab.style.color = 'var(--color-fg-muted)'; ab.style.fontSize = 'var(--cds-font-size-caption)'; }
       if (R.photo) { const img = add('img', 'reel-photo'); img.src = R.photo; img.alt = R.place; }

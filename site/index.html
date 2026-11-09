@@ -238,7 +238,7 @@
     const el = document.getElementById('detail'); el.replaceChildren();
     if (reel) {
       const add = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; el.appendChild(n); return n; };
-      add('div', 'kicker', `Reel · sent by ${reel.sender || 'one of us'}`);
+      add('div', 'kicker', `Reel · sent by ${reel.sender || 'one of us'}${reel.spots > 1 ? ` · spot ${reel.spot} of ${reel.spots}` : ''}`);
       add('div', 'route', reel.place);
       if (reel.about) { const ab = add('p', null, reel.about); ab.style.margin = '0 0 4px'; ab.style.color = 'var(--muted)'; ab.style.fontSize = '13px'; }
       if (reel.photo && reel.photo.startsWith('data:image/')) { const img = add('img', 'reel-photo'); img.src = reel.photo; img.alt = reel.place; }

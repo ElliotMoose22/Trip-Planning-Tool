@@ -43,15 +43,31 @@ def test_reels_are_coloured_and_sorted():
     assert any("Chiang Mai doesn't fit" in t for t in titles)
 
 
-def test_multi_place_reels_split_into_rows():
-    from triptool.reels import split_places
-    rows, _ = parse_reels(REELS[:3] + [["Nov 8", "Elliot", "https://instagram.com/reel/m", "Kyushu loop", "9",
-                                        "Kumamoto Castle; Mount Aso, Ubud (Bali)"]])
+def test_multi_place_reels_stay_one_row():
+    from triptool.reels import all_spots, merge_duplicates, split_places, write_back
+    rows, cols = parse_reels(REELS[:3] + [["Nov 8", "Elliot", "https://instagram.com/reel/m", "Kyushu loop", "9",
+                                           "Kumamoto Castle; Mount Aso, Ubud (Bali)"]])
     assert split_places(rows) == 2
     m = [r for r in rows if r.link.endswith("/m")]
-    assert [r.place for r in m] == ["Kumamoto Castle", "Mount Aso", "Ubud (Bali)"]
-    assert all(r.rating == 9 and r.sender == "Elliot" for r in m)
-    assert m[1].new and m[1].row == m[0].row + 1 and not m[0].new
+    assert len(m) == 1 and m[0].place == "Kumamoto Castle"
+    assert [s.place for s in m[0].spots] == ["Mount Aso", "Ubud (Bali)"]
+    spots = [s for s in all_spots(rows) if s.link.endswith("/m")]
+    assert len(spots) == 3 and all(s.rating == 9 and s.sender == "Elliot" for s in spots)
+
+
+def test_duplicate_rows_fold_into_one_reel():
+    from triptool.reels import merge_duplicates, write_back
+    grid = REELS[:2] + [REELS[2] + ["Other spots", "Spots data"]] + [["Nov 8", "Elliot", "https://instagram.com/reel/k/", "Kamakura spots", "8", "Kotoku-in", "Japan", "35.3", "139.5"],
+                        ["Nov 8", "Elliot", "https://instagram.com/reel/k", "↳ same reel", "8", "Goryo Shrine", "Japan", "35.31", "139.53"],
+                        ["Nov 8", "Elliot", "https://instagram.com/reel/k?igsh=x", "", "8", "Kotoku-in", "Japan", "35.3", "139.5"]]
+    rows, cols = parse_reels(grid)
+    keep = [r for r in rows if not r.dup]
+    assert len(keep) == 1 and [s.place for s in keep[0].spots] == ["Goryo Shrine"]
+    data = write_back(rows, cols)
+    cleared = {d["range"] for d in data if d["values"] == [[""]] and d["range"].endswith("6")}
+    assert cleared                                  # the duplicate rows are emptied
+    other = [d for d in data if d["range"].startswith("'Reels'!") and "Goryo Shrine" in str(d["values"])]
+    assert other
 
 
 def test_cover_image_and_frames(tmp_path):
