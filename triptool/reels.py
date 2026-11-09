@@ -114,8 +114,14 @@ Reels:
 def _claude(prompt: str, cwd: str | None = None) -> str:
     env = {**os.environ, "CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"].strip()}
     cmd = ["claude", "-p", prompt, "--output-format", "json"] + (["--allowedTools", "Read"] if cwd else [])
-    out = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env, cwd=cwd).stdout
-    return json.loads(out).get("result", "")
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=600, env=env, cwd=cwd)
+    try:
+        res = json.loads(p.stdout)
+    except ValueError:
+        raise RuntimeError(f"Claude Code gave no answer (exit {p.returncode}): {(p.stderr or p.stdout).strip()[:300]}")
+    if res.get("is_error"):
+        raise RuntimeError(f"Claude Code error: {str(res.get('result'))[:300]}")
+    return res.get("result", "")
 
 
 def extract_places(rows: list[ReelRow], batch: int = 5) -> int:
@@ -135,7 +141,10 @@ def extract_places(rows: list[ReelRow], batch: int = 5) -> int:
             lines.append(f"{i}. Caption: {r.caption[:600] or '(none)'}" + (f"\n   Frames: {', '.join(imgs)}" if imgs else ""))
         try:
             text = _claude(PROMPT + "\n".join(lines), cwd)
-            answer = json.loads(re.search(r"\[.*\]", text, re.S).group())
+            m = re.search(r"\[.*\]", text, re.S)
+            if not m:
+                raise RuntimeError(f"no JSON in Claude's reply: {text.strip()[:300]}")
+            answer = json.loads(m.group())
         except Exception as e:  # never sink the run over this
             print(f"  ! reading reels failed: {e}")
             continue
@@ -252,7 +261,26 @@ def fetch_media(rows: list[ReelRow], session=None) -> int:
 SPLIT = re.compile(r"\s*(?:[,;\n]|\s\+\s)\s*")
 
 
-def split_places(rows: list[ReelRow]) -> int:
+REGION_TYPES = {"state", "province", "region", "county", "prefecture", "country", "state_district", "archipelago"}
+
+
+def is_region(name: str, session=None) -> bool:
+    """True for a prefecture / province / country name ("Kagawa", "Bali"), which qualifies a place
+    rather than being a second place."""
+    import requests
+    s = session or requests.Session()
+    try:
+        res = s.get("https://nominatim.openstreetmap.org/search", params={"q": name, "format": "json", "limit": 1,
+                    "accept-language": "en"}, headers={"User-Agent": UA}, timeout=30).json()
+        time.sleep(1.1)
+    except Exception:
+        return False
+    return bool(res) and (res[0].get("addresstype") in REGION_TYPES or
+                          (res[0].get("class") == "boundary" and res[0].get("type") == "administrative"
+                           and res[0].get("addresstype") not in ("city", "town", "village", "municipality")))
+
+
+def split_places(rows: list[ReelRow], online: bool = False) -> int:
     """A reel naming several places ("Kamakura, Enoshima") becomes one row per place: the first stays on
     the reel's row, the rest are added as new rows under the table with the same link, sender and rating.
     Write a region in brackets to keep it with its place: "Ubud (Bali)"."""
@@ -263,9 +291,20 @@ def split_places(rows: list[ReelRow]) -> int:
         names = [n for n in SPLIT.split(r.place) if n]
         if len(names) < 2:
             continue
+        if online:   # "Teshima, Kagawa": the prefecture belongs to the place before it
+            merged = []
+            for n in names:
+                if merged and is_region(n):
+                    merged[-1] = f"{merged[-1]} ({n})" if "(" not in merged[-1] else merged[-1]
+                else:
+                    merged.append(n)
+            names = merged
+            if len(names) < 2:
+                r.place, r.changed = names[0], True
+                continue
         r.place, r.changed = names[0], True
         for n in names[1:]:
-            extra = ReelRow(nxt, r.received, r.sender, r.link, "↳ same reel as the row above",
+            extra = ReelRow(nxt, _clean_date(r.received), r.sender, r.link, "↳ same reel as the row above",
                             r.rating, n, r.country, None, None, "From a multi-place reel")
             extra.about, extra.photo, extra.photo_data = r.about, r.photo, r.photo_data
             extra.changed, extra.new = True, True
@@ -273,6 +312,17 @@ def split_places(rows: list[ReelRow]) -> int:
             nxt += 1
     rows.extend(new)
     return len(new)
+
+
+def _clean_date(v: str) -> str:
+    """'November 8|2026' (a sheet date read with its hidden year) -> '2026-11-08'."""
+    if "|" in v:
+        md, _, y = v.partition("|")
+        try:
+            return dt.datetime.strptime(f"{md.strip()} {y.strip()}", "%B %d %Y").date().isoformat()
+        except ValueError:
+            return md.strip()
+    return v
 
 
 # ---------- 2. coordinates ----------
@@ -326,7 +376,7 @@ def fetch_photos(rows: list[ReelRow], session=None) -> int:
             mime = img.headers.get("content-type", "image/jpeg").split(";")[0]
             if len(b64) < 45000:          # a Google Sheets cell holds up to 50,000 characters
                 r.photo_data = f"data:{mime};base64,{b64}"
-            r.photo = f'=IMAGE("{url}")'
+            r.photo = "From Wikipedia"
             r.changed = True
             n += 1
         except Exception as e:
@@ -346,7 +396,7 @@ def daytrip_km(hours: float) -> float:
     return hours * SPEED / ROAD
 
 
-def classify(r: ReelRow, stops: list[Stop], daytrip_hours: float = 2.5) -> None:
+def classify(r: ReelRow, stops: list[Stop], daytrip_hours: float = 2.5, flown: set | None = None) -> None:
     if r.lat is None or r.lon is None or not stops:
         r.colour, r.fits = "", ""
         return
@@ -364,6 +414,8 @@ def classify(r: ReelRow, stops: list[Stop], daytrip_hours: float = 2.5) -> None:
     for a, b in zip(stops, stops[1:]):
         # only overland stretches: two stops in the same country, not a long flight between countries
         if a.place == b.place or a.place.country != b.place.country:
+            continue
+        if flown and (a.place.name, b.place.name) in flown:     # you fly this hop: nothing is "on the way"
             continue
         ab = km(a.place.lat, a.place.lon, b.place.lat, b.place.lon)
         ax = km(a.place.lat, a.place.lon, r.lat, r.lon)
@@ -479,15 +531,16 @@ def ideas_update(rows: list[list], tab: str = "Ideas", max_rows: int = 190) -> l
     return [{"range": f"'{tab}'!A4:H{3 + max_rows}", "values": values}]
 
 
-def process(rows: list[ReelRow], stops: list[Stop], daytrip_hours: float = 2.5, online: bool = True) -> dict:
+def process(rows: list[ReelRow], stops: list[Stop], daytrip_hours: float = 2.5, online: bool = True,
+            flown: set | None = None) -> dict:
     stats = {"read": 0, "located": 0, "photos": 0, "watched": 0}
     if online:
         stats["watched"] = fetch_media(rows)
         stats["read"] = extract_places(rows)
-    stats["split"] = split_places(rows)
+    stats["split"] = split_places(rows, online)
     if online:
         stats["located"] = geocode(rows)
         stats["photos"] = fetch_photos(rows)
     for r in rows:
-        classify(r, stops, daytrip_hours)
+        classify(r, stops, daytrip_hours, flown)
     return stats

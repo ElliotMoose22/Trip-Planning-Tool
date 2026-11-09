@@ -91,7 +91,8 @@ def handle_reels(plan: Plan, s: Settings, online: bool) -> None:
         return
     from .reels import idea_recs, process
     rows, _cols = parsed
-    stats = process(rows, plan.stops, s.daytrip_hours, online=online)
+    flown = {(l.origin.name, l.destination.name) for l in plan.legs}
+    stats = process(rows, plan.stops, s.daytrip_hours, online=online, flown=flown)
     plan.recs = getattr(plan, "recs", []) + idea_recs(rows, plan.stops, getattr(plan, "place_rows", None))
     placed = sum(1 for r in rows if r.colour)
     print(f"Reels: {len(rows)} in the sheet, {placed} placed"

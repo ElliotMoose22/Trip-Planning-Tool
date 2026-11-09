@@ -68,3 +68,16 @@ def test_cover_image_and_frames(tmp_path):
     assert len(frames) == 4
     url = thumb_data_url(frames[0])
     assert url.startswith("data:image/jpeg;base64,") and len(url) < 45100
+
+
+def test_flown_hops_have_nothing_on_the_way():
+    from triptool.reels import ReelRow, _clean_date
+    places, _ = parse_places(PLACES, 2027)
+    legs, _ = parse_legs(LEGS, 2027)
+    plan = build_from_tables(places, legs, dt.date(2027, 6, 6), dt.date(2027, 6, 24))
+    hua = ReelRow(0, "", "Elliot", "x", "", 8, "Hua Hin", "Thailand", 12.57, 99.96, "")
+    classify(hua, plan.stops, flown={("Bangkok", "Phuket")})
+    assert hua.colour != "Yellow" or not hua.between        # no longer "on the way" if that hop is a flight
+    classify(hua, plan.stops)
+    assert hua.between
+    assert _clean_date("November 8|2026") == "2026-11-08" and _clean_date("Nov 8") == "Nov 8"
