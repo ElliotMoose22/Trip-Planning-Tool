@@ -23,7 +23,7 @@ jobs:
         run: npm i -g @anthropic-ai/claude-code
       - name: Place new reels on the trip
         env:
-          TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL }}
+          TRIP_SHEET_URL: ${{ secrets.TRIP_SHEET_URL || vars.TRIP_SHEET_URL }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: python -m triptool reels
