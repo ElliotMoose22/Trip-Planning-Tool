@@ -97,3 +97,26 @@ def test_flown_hops_have_nothing_on_the_way():
     classify(hua, plan.stops)
     assert hua.between
     assert _clean_date("November 8|2026") == "2026-11-08" and _clean_date("Nov 8") == "Nov 8"
+
+
+def test_unfound_spot_is_pinned_in_its_town():
+    from triptool.reels import ReelRow, geocode
+    import triptool.reels as R
+    R.time.sleep = lambda s: None
+
+    class Resp:
+        def __init__(self, data): self.data = data
+        def json(self): return self.data
+
+    class Session:
+        def get(self, url, params=None, **kw):
+            q = (params or {}).get("q", "")
+            if "photon" in url:
+                return Resp({"features": []})
+            if q == "Asakusa, Tokyo, Japan":
+                return Resp([{"lat": "35.7148", "lon": "139.7967", "address": {"country": "Japan"}}])
+            return Resp([])
+
+    r = ReelRow(3, "", "Elliot", "x", "", 10, "Benitsuru (Asakusa, Tokyo)", "Japan", None, None, "")
+    assert geocode([r], Session()) == 1
+    assert round(r.lat, 2) == 35.71 and r.status.startswith("Approximate") and "Asakusa" in r.status

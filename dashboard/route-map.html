@@ -270,13 +270,14 @@
         try { extra = sd >= 0 && r[sd] ? JSON.parse(r[sd]) : []; } catch (e) { extra = []; }
         const base = { place: at(r, 'place'), country: at(r, 'country'), rating: Number(at(r, 'rating')) || null,
                        sender: at(r, 'from'), link: at(r, 'reel link'), fits: at(r, 'fits'), colour: at(r, 'colour'), about: at(r, 'about'),
-                       photo: photo.startsWith('data:image/') ? photo : '', spots: extra.length + 1 };
+                       photo: photo.startsWith('data:image/') ? photo : '', spots: extra.length + 1,
+                       approx: /^approximate/i.test(at(r, 'status')) };
         const ok = (la, lo) => Number.isFinite(la) && Number.isFinite(lo) && !(la === 0 && lo === 0);
         const lat = parseFloat(at(r, 'lat')), lon = parseFloat(at(r, 'lon'));
         if (ok(lat, lon)) rows.push({ ...base, id: `r${i}`, lat, lon, spot: 1 });
         extra.forEach((x, k) => { const la = parseFloat(x.lat), lo = parseFloat(x.lon);
           if (ok(la, lo)) rows.push({ ...base, id: `r${i}s${k}`, place: x.place, country: x.country || base.country,
-                                      lat: la, lon: lo, fits: x.fits || '', colour: x.colour || '', spot: k + 2 }); });
+                                      lat: la, lon: lo, fits: x.fits || '', colour: x.colour || '', spot: k + 2, approx: !!x.approx }); });
       });
       return rows;
     },
@@ -415,6 +416,7 @@
       const line = add('p', null); line.style.margin = '6px 0 0';
       const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = R.colour === 'Green' ? '#5fd39a' : R.colour === 'Yellow' ? '#f5c542' : '#ef5b56';
       line.append(dot, document.createTextNode(R.fits || ''));
+      if (R.approx) { const n = add('p', null, 'Approximate pin: the exact spot wasn’t found on the map, so it’s placed in its town or district.'); n.style.margin = '4px 0 0'; n.style.fontSize = 'var(--cds-font-size-caption)'; n.style.color = 'var(--color-fg-muted)'; }
       const dl = add('dl');
       const row2 = (k, v) => { if (v == null || v === '') return; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
       row2('Rating', R.rating ? `${R.rating} / 10` : 'not rated yet'); row2('Sent by', R.sender); row2('Country', R.country);

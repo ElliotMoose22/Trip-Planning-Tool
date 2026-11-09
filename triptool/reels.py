@@ -116,6 +116,8 @@ def parse_reels(grid: Grid) -> tuple[list[ReelRow], dict[str, int]] | None:
             for d in json.loads(get("spots_data") or "[]"):
                 out[-1].spots.append(_spot(out[-1], d.get("place", ""), d.get("country", ""), lat=d.get("lat"),
                                            lon=d.get("lon"), colour=d.get("colour", ""), fits=d.get("fits", "")))
+                if d.get("approx"):
+                    out[-1].spots[-1].status = f"{APPROX}: pinned in its town"
         except (ValueError, AttributeError):
             pass
     merge_duplicates(out)
@@ -404,31 +406,73 @@ def geocode_queries(place: str, country: str = "") -> list[str]:
     return out
 
 
+APPROX = "Approximate"     # Status prefix for a spot pinned at its town because the exact place wasn't found
+
+
+def area_queries(place: str, country: str = "") -> list[str]:
+    """The town / district a place is in, most specific first: 'Benitsuru (Asakusa, Tokyo)' ->
+    'Asakusa, Tokyo, Japan', 'Tokyo, Japan'."""
+    inside = [x.strip() for x in ",".join(re.findall(r"\((.*?)\)", re.sub(r"\s{2,}", ", ", place))).split(",") if x.strip()]
+    tail = f", {country}" if country else ""
+    return [", ".join(inside[i:]) + tail for i in range(len(inside))]
+
+
 def geocode(rows: list[ReelRow], session=None) -> int:
+    """Exact spot from OpenStreetMap (Nominatim, then Photon's fuzzier search). If neither finds it,
+    pin it in its town or district instead and mark it Approximate."""
     import requests
     s = session or requests.Session()
     n = 0
-    for r in list(all_spots(rows)):
-        if r.place and (r.lat is None or r.lon is None):
+
+    def nominatim(q):
+        try:
+            res = s.get("https://nominatim.openstreetmap.org/search", params={"q": q, "format": "json", "limit": 1,
+                        "accept-language": "en", "addressdetails": 1}, headers={"User-Agent": UA}, timeout=30).json()
+        except Exception as e:
+            print(f"  ! geocoding {q}: {e}")
             res = None
-            for q in geocode_queries(r.place, r.country):
-                try:
-                    res = s.get("https://nominatim.openstreetmap.org/search", params={"q": q, "format": "json", "limit": 1,
-                                "accept-language": "en", "addressdetails": 1}, headers={"User-Agent": UA}, timeout=30).json()
-                except Exception as e:
-                    print(f"  ! geocoding {q}: {e}")
-                    res = None
-                time.sleep(1.1)   # Nominatim asks for at most one request a second
-                if res:
+        time.sleep(1.1)   # Nominatim asks for at most one request a second
+        return (float(res[0]["lat"]), float(res[0]["lon"]), res[0].get("address", {}).get("country", "")) if res else None
+
+    def photon(q):
+        try:
+            f = s.get("https://photon.komoot.io/api/", params={"q": q, "limit": 1, "lang": "en"},
+                      headers={"User-Agent": UA}, timeout=30).json().get("features") or []
+        except Exception:
+            return None
+        if not f:
+            return None
+        lon, lat = f[0]["geometry"]["coordinates"]
+        return lat, lon, f[0].get("properties", {}).get("country", "")
+
+    for r in list(all_spots(rows)):
+        if not r.place or (r.lat is not None and r.lon is not None):
+            continue
+        hit = None
+        for q in geocode_queries(r.place, r.country):
+            hit = nominatim(q)
+            if hit:
+                break
+        if not hit:
+            base = re.sub(r"\s*\(.*?\)", "", r.place).strip()
+            areas = area_queries(r.place, r.country)
+            hit = photon(f"{base} {areas[0]}" if areas else f"{base} {r.country}".strip())
+        approx = None
+        if not hit:
+            for q in area_queries(r.place, r.country):
+                hit = nominatim(q)
+                if hit:
+                    approx = q.rsplit(",", 1)[0] if r.country else q
                     break
-            if res:
-                r.lat, r.lon = float(res[0]["lat"]), float(res[0]["lon"])
-                r.country = r.country or res[0].get("address", {}).get("country", "")
-                r.changed = True
-                n += 1
-            else:
-                r.status = "Couldn't find this place — type a clearer name in Place"
-                r.changed = True
+        if hit:
+            r.lat, r.lon = hit[0], hit[1]
+            r.country = r.country or hit[2]
+            r.status = f"{APPROX}: exact spot not found, pinned in {approx}" if approx else ""
+            r.changed = True
+            n += 1
+        else:
+            r.status = "Couldn't find this place — type a clearer name in Place, e.g. 'Benitsuru (Asakusa, Tokyo)'"
+            r.changed = True
     return n
 
 
@@ -603,11 +647,14 @@ def write_back(rows: list[ReelRow], cols: dict[str, int], tab: str = "Reels") ->
         vals = {"place": r.place, "country": r.country, "lat": r.lat if r.lat is not None else "",
                 "lon": r.lon if r.lon is not None else "", "fits": r.fits, "colour": r.colour,
                 "photo": r.photo, "photo_data": r.photo_data, "about": r.about,
-                "status": r.status if r.status and not r.colour else ("Placed" if r.colour else r.status),
+                "status": (r.status if r.status.startswith(APPROX) else "Placed") if r.colour else r.status,
                 "rating": r.rating or "",
-                "other": "\n".join(f"{sp.place} — {sp.colour or 'not placed'}" for sp in r.spots),
+                "other": "\n".join(f"{sp.place} — {sp.colour or 'not placed'}"
+                                   + (" (approximate)" if sp.status.startswith(APPROX) else "") for sp in r.spots),
                 "spots_data": json.dumps([{"place": sp.place, "country": sp.country, "lat": sp.lat, "lon": sp.lon,
-                                           "colour": sp.colour, "fits": sp.fits} for sp in r.spots],
+                                           "colour": sp.colour, "fits": sp.fits,
+                                           **({"approx": True} if sp.status.startswith(APPROX) else {})}
+                                          for sp in r.spots],
                                          ensure_ascii=False) if r.spots else ""}
         for k, v in vals.items():
             if v != "" or k in ("fits", "colour", "status", "other", "spots_data"):

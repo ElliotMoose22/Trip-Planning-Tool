@@ -585,6 +585,22 @@
    "about": "Photogenic Kamakura spots through the year: seaside viewpoints, the Great Buddha, shrines, train stations and caf\u00e9s.",
    "spot": 6,
    "spots": 6
+  },
+  {
+   "place": "Benitsuru (Asakusa, Tokyo)",
+   "country": "Japan",
+   "lat": 35.7148,
+   "lon": 139.7967,
+   "rating": 10,
+   "sender": "Elliot",
+   "link": "https://www.instagram.com/reel/DAoIiBuS6YJ/",
+   "fits": "Day trip from Tokyo (~0.2 hrs each way)",
+   "colour": "Green",
+   "photo": "",
+   "about": "Fluffy strawberry Japanese souffl\u00e9 pancakes at Benitsuru; tickets are same-day walk-in only, so arrive early.",
+   "spot": 1,
+   "spots": 1,
+   "approx": true
   }
  ],
  "daytrip_km": 115.38461538461539

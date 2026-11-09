@@ -351,7 +351,8 @@ def reels_json(plan) -> list[dict]:
                 continue
             out.append({"place": sp.place, "country": sp.country, "lat": sp.lat, "lon": sp.lon, "rating": r.rating,
                         "sender": r.sender, "link": r.link, "fits": sp.fits, "colour": sp.colour,
-                        "photo": r.photo_data, "about": r.about, "spot": i + 1, "spots": len(group)})
+                        "photo": r.photo_data, "about": r.about, "spot": i + 1, "spots": len(group),
+                        "approx": sp.status.startswith("Approximate")})
     return out
 
 

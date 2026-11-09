@@ -246,6 +246,7 @@
       const line = add('p'); line.style.margin = '6px 0 0';
       const dot = document.createElement('span'); dot.className = 'dot'; dot.style.background = REEL_COL[reel.colour] || REEL_COL.Red;
       line.append(dot, document.createTextNode(reel.fits || ''));
+      if (reel.approx) { const n = add('p', null, 'Approximate pin: the exact spot wasn’t found on the map, so it’s placed in its town or district.'); n.style.margin = '4px 0 0'; n.style.fontSize = '12px'; n.style.color = 'var(--muted)'; }
       const dl = add('dl');
       const row = (k, v) => { if (v == null || v === '') return; const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; dl.append(dt, dd); };
       row('Rating', reel.rating ? `${reel.rating} / 10` : 'not rated yet'); row('Sent by', reel.sender); row('Country', reel.country);
@@ -530,10 +531,12 @@
           if (on) { cx.beginPath(); cx.arc(q.x, q.y, sz + 6, 0, 2 * Math.PI); cx.strokeStyle = '#ffe08a'; cx.lineWidth = 2.5; cx.stroke(); }
           cx.save(); cx.translate(q.x, q.y); cx.rotate(Math.PI / 4); cx.fillStyle = REEL_COL[q.r.colour] || REEL_COL.Red; cx.strokeStyle = '#0a1120'; cx.lineWidth = 2;
           cx.fillRect(-sz / 1.4, -sz / 1.4, sz * 1.41, sz * 1.41); cx.strokeRect(-sz / 1.4, -sz / 1.4, sz * 1.41, sz * 1.41); cx.restore();
+          if (q.r.approx) { cx.beginPath(); cx.arc(q.x, q.y, sz + 7, 0, 2 * Math.PI); cx.setLineDash([3, 3]); cx.strokeStyle = 'rgba(232,238,248,.7)'; cx.lineWidth = 1.2; cx.stroke(); cx.setLineDash([]); }
           cx.font = '500 11px ' + getComputedStyle(document.body).fontFamily;
-          const tw = cx.measureText(q.r.place).width, free = (lx, ly) => !placed.some((b) => Math.abs(b[1] - ly) < 15 && lx < b[0] + b[2] + 4 && lx + tw > b[0] - 4);
+          const label = (q.r.approx ? '≈ ' : '') + q.r.place;
+          const tw = cx.measureText(label).width, free = (lx, ly) => !placed.some((b) => Math.abs(b[1] - ly) < 15 && lx < b[0] + b[2] + 4 && lx + tw > b[0] - 4);
           const spot = [[q.x + 11, q.y], [q.x - 11 - tw, q.y], [q.x + 11, q.y + 15], [q.x + 11, q.y - 15]].find(([a, b]) => free(a, b));
-          if (spot) { placed.push([spot[0], spot[1], tw]); cx.fillStyle = 'rgba(7,12,22,.75)'; cx.fillRect(spot[0] - 3, spot[1] - 8, tw + 6, 16); cx.fillStyle = '#e8eef8'; cx.fillText(q.r.place, spot[0], spot[1]); }
+          if (spot) { placed.push([spot[0], spot[1], tw]); cx.fillStyle = 'rgba(7,12,22,.75)'; cx.fillRect(spot[0] - 3, spot[1] - 8, tw + 6, 16); cx.fillStyle = '#e8eef8'; cx.fillText(label, spot[0], spot[1]); }
           S.hits.push({ x: q.x, y: q.y, r: 12, reel: q.r });
         }
       }
