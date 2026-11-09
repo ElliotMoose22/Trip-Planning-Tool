@@ -100,9 +100,11 @@ PROMPT = """You help plan a trip (Japan, Thailand, Indonesia, Vietnam) from Inst
 For each reel below you get its caption and, when available, a few frames from the video (image files in the
 current folder: open them with the Read tool and look at landmarks, signs and on-screen text).
 For each reel:
-- "places": every specific place someone could travel to that the reel shows or names (attractions, beaches,
-  islands, parks or towns), most important first, at most 6, each with its country. Skip vague regions when a
-  specific spot is named; skip restaurants or shops unless that's all there is. Use [] if you can't tell.
+- "places": every specific spot the reel shows or names: attractions, viewpoints, beaches, islands, parks, towns,
+  and also restaurants, cafés, bars, markets and shops. Most important first, at most 6, each with its country.
+  Name each one as a map would know it; for a venue or a small spot, add its town or district in brackets so it
+  can be found exactly, e.g. "Afuri (Ebisu, Tokyo)" or "Fushimi Inari Taisha (Kyoto)". Skip vague regions when
+  a specific spot is named. Use [] if you can't tell.
 - "about": one short sentence (max 20 words) on what the reel shows and why it's worth going, for a map card.
 Answer with JSON only, no prose:
 [{"i": <number>, "places": [{"place": "<name as a map would know it>", "country": "<country>"}], "about": "<sentence>"}]

@@ -129,8 +129,11 @@ sheet (`instagram/Code.gs`) adds each reel to the **Reels** tab. Every night at 
 4. lists it under its country and stop in the **Ideas** tab, and adds an *Idea* recommendation when a
    yellow reel deserves a night in between (e.g. Hua Hin between Bangkok and Phuket).
 
-The dashboard shows each reel as a small diamond pin with the day-trip rings around your stops; click
-one for the name, rating, who sent it and the photo. Setup: [instagram/SETUP.md](instagram/SETUP.md).
+The maps show each reel as a small diamond pin with the day-trip rings around your stops; click one for
+the name, About line, photo, rating and who sent it. Crowded reels (Tokyo) become a count bubble. On the
+shared map, clicking a city, a reel or a bubble — or zooming in far enough — opens a **street-level map**
+(dark OpenStreetMap / CARTO tiles) with each reel at its exact spot, restaurants included. The claude.ai
+dashboard can't load map tiles, so it stays at globe level. Setup: [instagram/SETUP.md](instagram/SETUP.md).
 Change the day-trip limit with `reels: daytrip_hours` in `trip.yaml`.
 
 ## How the sheet is read

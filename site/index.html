@@ -45,6 +45,18 @@
   .reel-photo { object-fit: cover; background: var(--line); }
   .reel-nophoto { display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,.04); color: var(--muted); font-size: 12px; }
   .dot { display:inline-block; width:10px; height:10px; border-radius:2px; transform: rotate(45deg); margin-right:6px; }
+  .city { position:absolute; inset:0; background:#0b111c; display:none; touch-action:none; }
+  .city.on { display:block; }
+  .city canvas { display:block; cursor: grab; } .city canvas.dragging { cursor: grabbing; } .city canvas.over { cursor: pointer; }
+  .city .cbar { position:absolute; left:12px; right:12px; top:12px; display:flex; gap:8px; align-items:center; pointer-events:none; }
+  .city .cbar > * { pointer-events:auto; }
+  .city .cbar .name { font: 400 18px/1 var(--serif); color: var(--ink); text-shadow: 0 1px 3px #000; pointer-events:none; }
+  .city .cbar .btns { margin-left:auto; display:flex; gap:4px; }
+  .city button { background: rgba(20,30,48,.9); color: var(--ink); border:1px solid #2b3a57; border-radius: 8px; height:30px; min-width:30px; padding:0 10px; font: inherit; font-size:12px; cursor:pointer; }
+  .city button:hover { border-color:#4a6290; } .city button:focus-visible { outline: 2px solid var(--pick); outline-offset: 1px; }
+  .city .attr { position:absolute; right:6px; bottom:4px; font-size:10px; color:#7d8aa3; background: rgba(7,12,22,.7); padding: 1px 5px; border-radius: 4px; }
+  .city .attr a { color: inherit; }
+  .city .count { position:absolute; left:12px; bottom:10px; font-size:12px; color: var(--muted); background: rgba(7,12,22,.75); padding: 3px 8px; border-radius: 6px; }
   .tip { position:absolute; pointer-events:none; background: rgba(12,18,30,.94); border:1px solid #2b3a57; border-radius: 8px; padding: 6px 10px; font-size: 12px; white-space:nowrap; transform: translate(-50%, calc(-100% - 12px)); }
   .tip em { font-style:normal; color: var(--muted); display:block; }
   .side { display:grid; gap: 14px; }
@@ -106,6 +118,18 @@
         <span class="lg"><i></i>Bus / train</span><span class="la"><i></i>Could fly instead</span>
         <span class="lr g"><i></i>Reel: day trip</span><span class="lr y"><i></i>Reel: needs a night</span>
         <span class="lr r"><i></i>Reel: off the route</span><span class="lring"><i></i>Day-trip range</span>
+      </div>
+      <div class="city" id="city" aria-label="Street map">
+        <div class="cbar">
+          <button type="button" id="c-back">← Globe</button>
+          <span class="name" id="c-name"></span>
+          <div class="btns">
+            <button type="button" id="c-in" aria-label="Zoom in">+</button>
+            <button type="button" id="c-out" aria-label="Zoom out">−</button>
+          </div>
+        </div>
+        <div class="count" id="c-count"></div>
+        <div class="attr">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a></div>
       </div>
     </div>
 
@@ -194,8 +218,9 @@
 
   // ---- selection ----
   let selected = null, reel = null;
-  const pickReel = (r) => { reel = r; selected = null; drawLegs(); drawDetail(); G.flyTo(r.lon, r.lat, Math.max(G.k, 3)); };
-  const select = (id) => { selected = id; reel = null; drawLegs(); drawDetail(); const L = rows.find((r) => r.id === id);
+  const pickReel = (r, fromCity) => { reel = r; selected = null; drawLegs(); drawDetail();
+    if (!fromCity) City.open(r.lon, r.lat, 13, r.place); else City.paint(); };
+  const select = (id) => { selected = id; reel = null; City.close(); drawLegs(); drawDetail(); const L = rows.find((r) => r.id === id);
     if (L) { const m = d3.geoInterpolate([L.a[1], L.a[0]], [L.b[1], L.b[0]])(0.5); G.flyTo(m[0], m[1], Math.max(G.k, L.km > 4000 ? 1.4 : 2.6)); } };
 
   function drawLegs() {
@@ -340,30 +365,46 @@
       const [lx, ly] = spots.find(([a, b]) => !hits(a, b)) || spots[0]; placed.push([lx, ly, tw]);
       ctx.fillStyle = 'rgba(7,12,22,.75)'; ctx.fillRect(lx - 3, ly - 8, tw + 6, 16); ctx.fillStyle = '#e8eef8'; ctx.fillText(p.name, lx, ly);
     }
-    // reel pins: small diamonds coloured by how they fit
-    for (const R of reels) {
-      const s = toScreen(R.lon, R.lat, 0); if (s[2] <= 0.05) continue;
-      const [x, y] = s, on = reel && reel.id === R.id, r = on ? 7 : 5;
-      if (on) { ctx.beginPath(); ctx.arc(x, y, r + 5, 0, 2 * Math.PI); ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2; ctx.stroke(); }
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillStyle = REEL_COL[R.colour] || REEL_COL.Red; ctx.strokeStyle = '#0a1120'; ctx.lineWidth = 1.5;
-      ctx.fillRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.strokeRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.restore();
-      if (G.k > 2.2 || on) {
-        ctx.font = '500 10px ' + getComputedStyle(document.body).fontFamily;
-        const tw = ctx.measureText(R.place).width;
-        const free = (lx, ly) => !placed.some((q) => Math.abs(q[1] - ly) < 13 && lx < q[0] + q[2] + 4 && lx + tw > q[0] - 4);
-        const spot = [[x + 9, y + 1], [x - 9 - tw, y + 1], [x + 9, y + 13], [x - 9 - tw, y + 13], [x + 9, y - 11]].find(([a, b]) => free(a, b));
-        if (spot || on) { const [lx, ly] = spot || [x + 9, y + 1]; placed.push([lx, ly, tw]);
-          ctx.fillStyle = 'rgba(7,12,22,.6)'; ctx.fillRect(lx - 2, ly - 6, tw + 4, 12); ctx.fillStyle = 'rgba(232,238,248,.9)'; ctx.fillText(R.place, lx, ly); }
+    // reel pins: small diamonds coloured by how they fit; crowded ones become a count bubble
+    const vis = reels.map((R) => { const s = toScreen(R.lon, R.lat, 0); return { R, x: s[0], y: s[1], z: s[2] }; }).filter((q) => q.z > 0.05);
+    const groups = [];
+    for (const q of vis) { const g = groups.find((g) => Math.hypot(g.x - q.x, g.y - q.y) < 14); if (g) g.items.push(q); else groups.push({ x: q.x, y: q.y, items: [q] }); }
+    G.reelHits = [];
+    for (const g of groups) {
+      if (g.items.length > 2) {
+        const n = g.items.length, rad = 8 + Math.min(8, n / 2), cnt = d3.rollup(g.items, (v) => v.length, (q) => q.R.colour); let a0 = -Math.PI / 2;
+        for (const [c, k] of cnt) { const a1 = a0 + 2 * Math.PI * k / n; ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.arc(g.x, g.y, rad, a0, a1); ctx.closePath(); ctx.fillStyle = REEL_COL[c] || REEL_COL.Red; ctx.fill(); a0 = a1; }
+        ctx.beginPath(); ctx.arc(g.x, g.y, rad - 3, 0, 2 * Math.PI); ctx.fillStyle = '#0e1626'; ctx.fill();
+        ctx.font = '700 10px ' + getComputedStyle(document.body).fontFamily; ctx.fillStyle = '#e8eef8'; ctx.textAlign = 'center'; ctx.fillText(n, g.x, g.y + 0.5); ctx.textAlign = 'left';
+        G.reelHits.push({ x: g.x, y: g.y, r: rad + 2, group: g });
+        continue;
+      }
+      for (const q of g.items) {
+        const R = q.R, [x, y] = [q.x, q.y], on = reel && reel.id === R.id, r = on ? 7 : 5;
+        if (on) { ctx.beginPath(); ctx.arc(x, y, r + 5, 0, 2 * Math.PI); ctx.strokeStyle = '#ffe08a'; ctx.lineWidth = 2; ctx.stroke(); }
+        ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4); ctx.fillStyle = REEL_COL[R.colour] || REEL_COL.Red; ctx.strokeStyle = '#0a1120'; ctx.lineWidth = 1.5;
+        ctx.fillRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.strokeRect(-r / 1.4, -r / 1.4, r * 1.41, r * 1.41); ctx.restore();
+        G.reelHits.push({ x, y, r: 9, reel: R });
+        if (G.k > 2.2 || on) {
+          ctx.font = '500 10px ' + getComputedStyle(document.body).fontFamily;
+          const tw = ctx.measureText(R.place).width;
+          const free = (lx, ly) => !placed.some((q2) => Math.abs(q2[1] - ly) < 13 && lx < q2[0] + q2[2] + 4 && lx + tw > q2[0] - 4);
+          const spot = [[x + 9, y + 1], [x - 9 - tw, y + 1], [x + 9, y + 13], [x - 9 - tw, y + 13], [x + 9, y - 11]].find(([a, b]) => free(a, b));
+          if (spot || on) { const [lx, ly] = spot || [x + 9, y + 1]; placed.push([lx, ly, tw]);
+            ctx.fillStyle = 'rgba(7,12,22,.6)'; ctx.fillRect(lx - 2, ly - 6, tw + 4, 12); ctx.fillStyle = 'rgba(232,238,248,.9)'; ctx.fillText(R.place, lx, ly); }
+        }
       }
     }
   }
 
-  const zoom = d3.zoom().scaleExtent([0.8, 9]).filter((e) => !e.button)
+  const GLOBE_MAX = 14;
+  const zoom = d3.zoom().scaleExtent([0.8, GLOBE_MAX]).filter((e) => !e.button)
     .on('start', () => canvas.classList.add('dragging'))
     .on('zoom', (e) => { const se = e.sourceEvent;
       if (se && /move/.test(se.type) && G.last) { const f = 0.25 / G.k;
         G.rot = [G.rot[0] + (e.transform.x - G.last.x) * f, Math.max(-85, Math.min(85, G.rot[1] - (e.transform.y - G.last.y) * f)), 0]; }
-      G.k = e.transform.k; G.last = e.transform; paint(); })
+      G.k = e.transform.k; G.last = e.transform; paint();
+      if (G.k >= GLOBE_MAX * 0.98 && !City.isOpen()) City.open(-G.rot[0], -G.rot[1], 8); })
     .on('end', () => canvas.classList.remove('dragging'));
   d3.select(canvas).call(zoom).on('dblclick.zoom', null); G.last = d3.zoomIdentity;
   G.setK = (k) => { d3.select(canvas).call(zoom.scaleTo, k); paint(); };
@@ -375,13 +416,13 @@
   const fit = () => { const pts = rows.filter((r) => r.kind !== 'alt').flatMap((r) => [[r.a[1], r.a[0]], [r.b[1], r.b[0]]]).filter((p) => p[0] > 60);
     if (!pts.length) return; const c = d3.geoCentroid({ type: 'MultiPoint', coordinates: pts }), spread = d3.max(pts, (p) => d3.geoDistance(p, c));
     G.flyTo(c[0], c[1], Math.max(1, Math.min(4, 0.9 / Math.sin(Math.min(1.4, spread + 0.15))))); };
-  document.getElementById('zin').onclick = () => G.setK(Math.min(9, G.k * 1.5));
+  document.getElementById('zin').onclick = () => G.setK(Math.min(GLOBE_MAX, G.k * 1.5));
   document.getElementById('zout').onclick = () => G.setK(Math.max(0.8, G.k / 1.5));
   document.getElementById('fit').onclick = fit;
 
   const pickAt = (mx, my) => {
     let best = null, bd = 12;
-    for (const R of reels) { const s = toScreen(R.lon, R.lat, 0); if (s[2] <= 0) continue; const d = Math.hypot(s[0] - mx, s[1] - my); if (d < bd) { bd = d; best = { reel: R }; } }
+    for (const hh of G.reelHits || []) { const d = Math.hypot(hh.x - mx, hh.y - my); if (d <= hh.r && d < bd) { bd = d; best = hh.reel ? { reel: hh.reel } : { group: hh.group }; } }
     if (best) return best;
     for (const p of pins) { const s = toScreen(p.lon, p.lat, 0); if (s[2] <= 0) continue; const d = Math.hypot(s[0] - mx, s[1] - 14 - my); if (d < bd) { bd = d; best = { pin: p }; } }
     if (best) return best;
@@ -396,7 +437,8 @@
     if (!hit || e.pointerType === 'touch') { tip.hidden = true; return; }
     tip.hidden = false; tip.style.left = (e.clientX - r.left) + 'px'; tip.style.top = (e.clientY - r.top) + 'px';
     const em = document.createElement('em');
-    if (hit.reel) { const R = hit.reel; tip.replaceChildren(R.place); em.textContent = `${R.rating ? R.rating + '/10' : 'unrated'} · ${R.sender || ''}`; }
+    if (hit.group) { tip.replaceChildren(`${hit.group.items.length} reels here`); em.textContent = 'Click for the street map'; }
+    else if (hit.reel) { const R = hit.reel; tip.replaceChildren(R.place); em.textContent = `${R.rating ? R.rating + '/10' : 'unrated'} · ${R.sender || ''}`; }
     else if (hit.leg) { const L = hit.leg; tip.replaceChildren(`${L.from} → ${L.to}`); em.textContent = `${L.when} · ${L.kind === 'flight' ? (L.cost == null ? 'no price yet' : money(L.cost)) : L.how}`; }
     else { const P = hit.pin; tip.replaceChildren(P.name); em.textContent = P.home ? 'Start' : P.nights ? `${P.nights} night${P.nights > 1 ? 's' : ''}` : 'Passing through'; }
     tip.appendChild(em); if (G.reduce) paint();
@@ -404,10 +446,131 @@
   canvas.addEventListener('pointerleave', () => { G.hover = null; tip.hidden = true; paint(); });
   canvas.addEventListener('click', (e) => {
     const r = canvas.getBoundingClientRect(), hit = pickAt(e.clientX - r.left, e.clientY - r.top); if (!hit) return;
-    if (hit.reel) pickReel(hit.reel);
+    if (hit.group) { const c = d3.geoCentroid({ type: 'MultiPoint', coordinates: hit.group.items.map((q) => [q.R.lon, q.R.lat]) }); City.open(c[0], c[1], 11, ''); }
+    else if (hit.reel) pickReel(hit.reel);
     else if (hit.leg) select(hit.leg.id);
-    else { const L = rows.find((x) => x.kind !== 'alt' && x.to === hit.pin.name) || rows.find((x) => x.from === hit.pin.name); if (L) select(L.id); }
+    else City.open(hit.pin.lon, hit.pin.lat, 10, hit.pin.name);
   });
+
+  // ---- street map: dark web tiles, pins, day-trip rings, reels clustered when they crowd ----
+  const City = (() => {
+    const box = document.getElementById('city'), cv = document.createElement('canvas'), cx = cv.getContext('2d');
+    const ctip = document.createElement('div'); ctip.className = 'tip'; ctip.hidden = true;
+    box.prepend(cv); box.appendChild(ctip);
+    const S = { open: false, t: d3.zoomIdentity, w: 0, h: 0, hits: [] }, tiles = new Map();
+    const dpr = () => window.devicePixelRatio || 1;
+    const unit = d3.geoMercator().scale(1 / (2 * Math.PI)).translate([0, 0]);
+    const proj = () => d3.geoMercator().scale(S.t.k / (2 * Math.PI)).translate([S.t.x, S.t.y]);
+    const zoomOf = (k) => Math.log2(k / 256);
+    const tile = (z, x, y) => {
+      const n = 2 ** z, xx = ((x % n) + n) % n, key = `${z}/${xx}/${y}`;
+      let im = tiles.get(key);
+      if (!im) { im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => paint(); im.onerror = () => { im.bad = true; };
+        im.src = `https://${'abcd'[(xx + y) % 4]}.basemaps.cartocdn.com/dark_all/${z}/${xx}/${y}${dpr() > 1 ? '@2x' : ''}.png`;
+        tiles.set(key, im); if (tiles.size > 600) tiles.delete(tiles.keys().next().value); }
+      return im;
+    };
+    const zb = d3.zoom().scaleExtent([256 * 2 ** 3, 256 * 2 ** 18])
+      .on('start', () => cv.classList.add('dragging')).on('end', () => cv.classList.remove('dragging'))
+      .on('zoom', (e) => { S.t = e.transform; paint(); if (zoomOf(S.t.k) < 4.2 && e.sourceEvent) close(); });
+    d3.select(cv).call(zb).on('dblclick.zoom', null);
+    const goto = (lon, lat, z, animate) => {
+      const p = unit([lon, lat]), t = d3.zoomIdentity.translate(S.w / 2, S.h / 2).scale(256 * 2 ** z).translate(-p[0], -p[1]);
+      (animate ? d3.select(cv).transition().duration(600) : d3.select(cv)).call(zb.transform, t);
+    };
+    function size() {
+      const r = box.getBoundingClientRect(); S.w = r.width; S.h = r.height;
+      cv.width = S.w * dpr(); cv.height = S.h * dpr(); cv.style.width = S.w + 'px'; cv.style.height = S.h + 'px';
+      cx.setTransform(dpr(), 0, 0, dpr(), 0, 0);
+    }
+    function paint() {
+      if (!S.open) return;
+      const { w, h, t } = S, P = proj(), path = d3.geoPath(P, cx);
+      cx.fillStyle = '#0b111c'; cx.fillRect(0, 0, w, h);
+      // tiles
+      const z = Math.max(0, Math.min(19, Math.round(zoomOf(t.k)))), ts = t.k / 2 ** z, ox = t.x - t.k / 2, oy = t.y - t.k / 2;
+      for (let y = Math.max(0, Math.floor(-oy / ts)); y <= Math.min(2 ** z - 1, Math.floor((h - oy) / ts)); y++)
+        for (let x = Math.floor(-ox / ts); x <= Math.floor((w - ox) / ts); x++) {
+          const im = tile(z, x, y);
+          if (im.complete && !im.bad && im.naturalWidth) cx.drawImage(im, ox + x * ts, oy + y * ts, ts + 0.5, ts + 0.5);
+        }
+      // day-trip rings + route
+      cx.setLineDash([5, 5]); cx.lineWidth = 1.5; cx.strokeStyle = 'rgba(95,211,154,.7)'; cx.fillStyle = 'rgba(95,211,154,.05)';
+      for (const p of pins.filter((p) => p.nights)) { cx.beginPath(); path(d3.geoCircle().center([p.lon, p.lat]).radius(DAYTRIP_KM / 111.2).precision(1)()); cx.fill(); cx.stroke(); }
+      cx.setLineDash([]);
+      for (const r of rows.filter((r) => r.kind !== 'alt')) {
+        cx.beginPath(); path({ type: 'LineString', coordinates: [[r.a[1], r.a[0]], [r.b[1], r.b[0]]] });
+        cx.setLineDash(r.kind === 'ground' ? [2, 5] : []); cx.lineWidth = 2; cx.strokeStyle = r.kind === 'ground' ? 'rgba(159,177,201,.8)' : r.booked ? 'rgba(127,178,255,.8)' : 'rgba(255,179,107,.85)'; cx.stroke();
+      }
+      cx.setLineDash([]);
+      // stops
+      cx.font = '600 12px ' + getComputedStyle(document.body).fontFamily; cx.textBaseline = 'middle';
+      const placed = [];
+      for (const p of pins) { const [x, y] = P([p.lon, p.lat]); if (x < -50 || y < -50 || x > w + 50 || y > h + 50) continue;
+        cx.beginPath(); cx.arc(x, y, 6, 0, 2 * Math.PI); cx.fillStyle = p.nights ? '#fff' : '#9fb1c9'; cx.fill(); cx.lineWidth = 2; cx.strokeStyle = '#0a1120'; cx.stroke();
+        const tw = cx.measureText(p.name).width; placed.push([x + 10, y, tw]);
+        cx.fillStyle = 'rgba(7,12,22,.8)'; cx.fillRect(x + 7, y - 9, tw + 6, 18); cx.fillStyle = '#e8eef8'; cx.fillText(p.name, x + 10, y); }
+      // reels, clustered on screen
+      const pts = reels.map((r) => { const [x, y] = P([r.lon, r.lat]); return { r, x, y }; }).filter((q) => q.x > -30 && q.y > -30 && q.x < w + 30 && q.y < h + 30);
+      const groups = [];
+      for (const q of pts) { const g = groups.find((g) => Math.hypot(g.x - q.x, g.y - q.y) < 26); if (g) { g.items.push(q); g.x = (g.x * (g.items.length - 1) + q.x) / g.items.length; g.y = (g.y * (g.items.length - 1) + q.y) / g.items.length; } else groups.push({ x: q.x, y: q.y, items: [q] }); }
+      S.hits = [];
+      for (const g of groups) {
+        if (g.items.length > 1 && zoomOf(t.k) < 17) {
+          const n = g.items.length, best = d3.max(g.items, (q) => q.r.rating || 0), rad = 11 + Math.min(10, n);
+          const cnt = d3.rollup(g.items, (v) => v.length, (q) => q.r.colour); let a0 = -Math.PI / 2;
+          for (const [c, k] of cnt) { const a1 = a0 + 2 * Math.PI * k / n; cx.beginPath(); cx.moveTo(g.x, g.y); cx.arc(g.x, g.y, rad, a0, a1); cx.closePath(); cx.fillStyle = REEL_COL[c] || REEL_COL.Red; cx.fill(); a0 = a1; }
+          cx.beginPath(); cx.arc(g.x, g.y, rad - 4, 0, 2 * Math.PI); cx.fillStyle = '#0e1626'; cx.fill();
+          cx.fillStyle = '#e8eef8'; cx.font = '700 11px ' + getComputedStyle(document.body).fontFamily; cx.textAlign = 'center'; cx.fillText(n, g.x, g.y + 0.5); cx.textAlign = 'left';
+          S.hits.push({ x: g.x, y: g.y, r: rad, group: g, best });
+          continue;
+        }
+        for (const q of g.items) {
+          const on = reel && reel.id === q.r.id, sz = on ? 9 : 7;
+          if (on) { cx.beginPath(); cx.arc(q.x, q.y, sz + 6, 0, 2 * Math.PI); cx.strokeStyle = '#ffe08a'; cx.lineWidth = 2.5; cx.stroke(); }
+          cx.save(); cx.translate(q.x, q.y); cx.rotate(Math.PI / 4); cx.fillStyle = REEL_COL[q.r.colour] || REEL_COL.Red; cx.strokeStyle = '#0a1120'; cx.lineWidth = 2;
+          cx.fillRect(-sz / 1.4, -sz / 1.4, sz * 1.41, sz * 1.41); cx.strokeRect(-sz / 1.4, -sz / 1.4, sz * 1.41, sz * 1.41); cx.restore();
+          cx.font = '500 11px ' + getComputedStyle(document.body).fontFamily;
+          const tw = cx.measureText(q.r.place).width, free = (lx, ly) => !placed.some((b) => Math.abs(b[1] - ly) < 15 && lx < b[0] + b[2] + 4 && lx + tw > b[0] - 4);
+          const spot = [[q.x + 11, q.y], [q.x - 11 - tw, q.y], [q.x + 11, q.y + 15], [q.x + 11, q.y - 15]].find(([a, b]) => free(a, b));
+          if (spot) { placed.push([spot[0], spot[1], tw]); cx.fillStyle = 'rgba(7,12,22,.75)'; cx.fillRect(spot[0] - 3, spot[1] - 8, tw + 6, 16); cx.fillStyle = '#e8eef8'; cx.fillText(q.r.place, spot[0], spot[1]); }
+          S.hits.push({ x: q.x, y: q.y, r: 12, reel: q.r });
+        }
+      }
+      document.getElementById('c-count').textContent = pts.length ? `${pts.length} reel${pts.length > 1 ? 's' : ''} in view` : 'No reels in view yet';
+    }
+    const hitAt = (mx, my) => S.hits.filter((hh) => Math.hypot(hh.x - mx, hh.y - my) <= hh.r).sort((a, b) => !!a.reel - !!b.reel).pop();
+    cv.addEventListener('pointermove', (e) => {
+      const b = cv.getBoundingClientRect(), hh = hitAt(e.clientX - b.left, e.clientY - b.top);
+      cv.classList.toggle('over', !!hh);
+      if (!hh || e.pointerType === 'touch') { ctip.hidden = true; return; }
+      ctip.hidden = false; ctip.style.left = (e.clientX - b.left) + 'px'; ctip.style.top = (e.clientY - b.top) + 'px';
+      const em = document.createElement('em');
+      if (hh.reel) { ctip.replaceChildren(hh.reel.place); em.textContent = `${hh.reel.rating ? hh.reel.rating + '/10' : 'unrated'} · ${hh.reel.sender || ''}`; }
+      else { ctip.replaceChildren(`${hh.group.items.length} reels`); em.textContent = 'Click to zoom in'; }
+      ctip.appendChild(em);
+    });
+    cv.addEventListener('pointerleave', () => { ctip.hidden = true; });
+    cv.addEventListener('click', (e) => {
+      const b = cv.getBoundingClientRect(), hh = hitAt(e.clientX - b.left, e.clientY - b.top); if (!hh) return;
+      if (hh.reel) pickReel(hh.reel, true);
+      else { const ll = proj().invert([hh.x, hh.y]); goto(ll[0], ll[1], Math.min(18, zoomOf(S.t.k) + 2), true); }
+    });
+    function open(lon, lat, z, name) {
+      S.open = true; box.classList.add('on'); size();
+      document.getElementById('c-name').textContent = name || '';
+      goto(lon, lat, z || 11, false); paint();
+    }
+    function close() {
+      if (!S.open) return; S.open = false; box.classList.remove('on'); ctip.hidden = true;
+      if (G.k >= GLOBE_MAX * 0.9) G.setK(GLOBE_MAX * 0.6);
+    }
+    document.getElementById('c-back').onclick = close;
+    document.getElementById('c-in').onclick = () => d3.select(cv).transition().duration(250).call(zb.scaleBy, 2);
+    document.getElementById('c-out').onclick = () => { if (zoomOf(S.t.k) <= 5) close(); else d3.select(cv).transition().duration(250).call(zb.scaleBy, 0.5); };
+    new ResizeObserver(() => { if (S.open) { const c = proj().invert([S.w / 2, S.h / 2]); size(); goto(c[0], c[1], zoomOf(S.t.k)); } }).observe(box);
+    return { open, close, paint, isOpen: () => S.open };
+  })();
 
   drawLegs(); drawDetail(); size(); fit();
   new ResizeObserver(size).observe(el);
