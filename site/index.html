@@ -673,8 +673,15 @@
       const holder = document.createElement('div');          // MapLibre styles its container position:relative; keep ours absolute
       holder.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
       el.appendChild(holder);
+      let tileOk = false, errs = 0;
+      const giveUp = (why) => { if (failed) return; failed = true; ready = false; box.classList.remove('three'); tilt.hidden = true;
+        console.warn('3D map not drawing on this browser, using the flat street map:', why); };
       map = new maplibregl.Map({ container: holder, style, center: [lon, lat], zoom: z, pitch: 55, bearing: -15, maxPitch: 70,
         attributionControl: { compact: true }, dragRotate: true, minZoom: 3 });
+      map.on('data', (e) => { if (e.dataType === 'source' && e.tile) tileOk = true; });
+      map.on('error', (e) => { errs++; if (!tileOk && errs >= 3) giveUp(e && e.error && e.error.message); });
+      map.on('webglcontextlost', () => giveUp('graphics context lost'));
+      setTimeout(() => { if (!tileOk) giveUp('no map tiles after 10 s'); }, 10000);
       map.on('load', () => {
         map.addLayer({ id: 'b3d', type: 'fill-extrusion', source: vec, 'source-layer': 'building', minzoom: 13,
           paint: { 'fill-extrusion-color': ['interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 8], 0, '#202b3e', 60, '#2c3a55', 200, '#3a4b6b'],
