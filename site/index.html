@@ -670,7 +670,10 @@
       const vec = Object.keys(style.sources).find((k) => style.sources[k].type === 'vector');
       style.layers = style.layers.filter((l) => !(l['source-layer'] === 'building' && l.type === 'fill'));
       const firstLabel = (style.layers.find((l) => l.type === 'symbol') || {}).id;
-      map = new maplibregl.Map({ container: el, style, center: [lon, lat], zoom: z, pitch: 55, bearing: -15, maxPitch: 70,
+      const holder = document.createElement('div');          // MapLibre styles its container position:relative; keep ours absolute
+      holder.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
+      el.appendChild(holder);
+      map = new maplibregl.Map({ container: holder, style, center: [lon, lat], zoom: z, pitch: 55, bearing: -15, maxPitch: 70,
         attributionControl: { compact: true }, dragRotate: true, minZoom: 3 });
       map.on('load', () => {
         map.addLayer({ id: 'b3d', type: 'fill-extrusion', source: vec, 'source-layer': 'building', minzoom: 13,
@@ -711,7 +714,10 @@
         map.on('mouseleave', 'reel', () => pop.remove());
         map.on('moveend', count);
         map.on('zoomend', () => { if (map.getZoom() < 4.6 && ready) document.getElementById('c-back').click(); });
-        ready = true; box.classList.add('three'); tilt.hidden = false; count();
+        ready = true; box.classList.add('three'); tilt.hidden = false;
+        map.resize();
+        if (!map.getCanvas().clientHeight) { failed = true; ready = false; box.classList.remove('three'); tilt.hidden = true; return; }
+        count();
         if (pending) { const p = pending; pending = null; jump(...p); }
       });
     }
